@@ -1,8 +1,14 @@
 const { isIP } = require('node:net');
+const fs = require('node:fs');
+const path = require('node:path');
+const express = require('express');
 const { loadConfig } = require('../config/env');
 const { createApp } = require('../app');
 const { createDatabasePool, checkRagDatabase } = require('../db/pool');
 const { createKnowledgeRepository } = require('../db/knowledgeRepository');
+
+const manualHtml = fs.readFileSync(path.join(__dirname, 'manualTest.html'));
+const manualScript = fs.readFileSync(path.join(__dirname, 'manualTest.js'));
 
 function privateLanHost(value) {
   if (typeof value !== 'string' || isIP(value) !== 4) {
@@ -23,6 +29,26 @@ function assertManualDevConfig(config) {
   }
 }
 
+function createLanApp(config, dependencies = {}) {
+  const app = express();
+  app.disable('x-powered-by');
+  app.disable('etag');
+  const noStore = (req, res, next) => {
+    res.set({ 'Cache-Control': 'no-store', Pragma: 'no-cache',
+      'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
+    next();
+  };
+  app.get('/manual-test', noStore, (req, res) => {
+    res.set({ 'Content-Security-Policy': "default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      'X-Frame-Options': 'DENY' });
+    res.type('html').send(manualHtml);
+  });
+  app.get('/manual-test.js', noStore, (req, res) => res.type('js').send(manualScript));
+  app.use('/api/sms/analyze', noStore);
+  app.use(createApp(config, dependencies));
+  return app;
+}
+
 async function main() {
   const host = privateLanHost(process.env.APCIDA_DEV_LAN_HOST);
   const config = loadConfig();
@@ -34,7 +60,7 @@ async function main() {
       await checkRagDatabase(pool);
     }
     const knowledgeRepository = pool ? createKnowledgeRepository(pool) : undefined;
-    const server = createApp(config, { knowledgeRepository }).listen(config.port, host, () => {
+    const server = createLanApp(config, { knowledgeRepository }).listen(config.port, host, () => {
       process.stdout.write(`Manual development server listening at http://${host}:${config.port}\n`);
     });
     server.on('error', async (error) => {
@@ -58,4 +84,4 @@ if (require.main === module) main().catch((error) => {
   process.exitCode = 1;
 });
 
-module.exports = { privateLanHost, assertManualDevConfig };
+module.exports = { privateLanHost, assertManualDevConfig, createLanApp };

@@ -1,6 +1,6 @@
 # ApCiDa AI server
 
-Local Express API for analyzing one SMS at a time with `gemma3:12b` through Ollama. The server listens on `127.0.0.1` only. It keeps no SMS database and does not log request bodies or SMS text. Opening `/` in a browser shows the available API routes.
+Local Express API for analyzing one SMS at a time with `gemma3:12b` through Ollama. Normal `npm start` listens on `127.0.0.1` only; the separate Phase 3A manual development launcher can bind an explicitly selected private LAN address. It keeps no SMS database and does not log request bodies or SMS text. Opening `/` in a browser shows the available API routes.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ The generated `.env` is ignored by Git. Optional settings can be added to it:
 | `RAG_ENABLED` | `false` | Enable local embedding and pgvector retrieval |
 | `DATABASE_URL` | optional while RAG is off | Local PostgreSQL URL for database `apcida` |
 
-The example values are in `.env.example`. Express always binds to `127.0.0.1`; no host environment setting can expose it on a network interface. Keep Ollama bound to localhost as well.
+The example values are in `.env.example`. Normal `npm start` always binds to `127.0.0.1`; only the separate manual development launcher below can bind a private LAN interface. Keep Ollama bound to localhost as well.
 
 ## Start
 
@@ -52,9 +52,8 @@ Analyze an SMS from the second Terminal window:
 
 ```sh
 cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
-source .env
-curl -sS -X POST http://127.0.0.1:3000/api/sms/analyze \
-  -H "x-api-key: $API_KEY" \
+node -e 'require("dotenv").config({ quiet: true }); const key = process.env.API_KEY; if (!key || /[\r\n"\\]/.test(key)) process.exit(1); process.stdout.write(`header = "x-api-key: ${key}"\n`);' | \
+curl --config - -sS -X POST http://127.0.0.1:3000/api/sms/analyze \
   -H 'content-type: application/json' \
   --data '{"messageId":"example-001","sender":"ExampleSender","text":"Your appointment is tomorrow at 9 AM.","receivedAt":"2026-10-26T09:00:00+08:00"}'
 ```
@@ -361,5 +360,91 @@ node src/evaluation/phase2hDiagnostic.js compare
 `caffeinate -i` holds an idle-system-sleep assertion for the duration of the child command. It cannot prevent forced sleep from closing the lid, low battery, or choosing Sleep. The diagnostic writes `diagnostic-events.jsonl` with UTC timestamps and elapsed times for run and chat events, plus the normal `evaluation.json`, `evaluation.csv`, `evaluation-metrics.csv`, and checkpoint. Events contain IDs, counts, timings, and error codes; they do not contain SMS text. The run refuses to reuse an existing diagnostic checkpoint so a second invocation cannot silently skip both requests. The `compare` command reads the two-message report and the three original Phase 2G reports and prints per-ID verdict, error, and duration.
 
 For a sleep correlation, compare `chat_start` and `chat_error`/`chat_end` timestamps with `pmset -g log` sleep and wake entries. The original Phase 2G reports have per-row durations but no row timestamps. Their `OLLAMA_TIMEOUT` durations closely matched recorded Mac sleep intervals; this supports sleep as a cause, but does not rule out model load or memory pressure in a different run. The diagnostic does not change the existing timeout, retry behavior, prompts, rules, knowledge, or verdict policy.
+
+## Phase 3A: manual Android development preparation
+
+The Android app source is not in this workspace. Its SMS receiver, on-device classifier, notifications, and UI have not been inspected or changed. The existing API already supports one explicitly submitted SMS. The new `src/dev/lanServer.js` launcher is opt-in and binds only to a private IPv4 address supplied for this run; normal `npm start` remains loopback-only. It refuses the experimental resolver, non-shadow verdict mode, a different model, and the placeholder API key. Ollama and PostgreSQL stay on the Mac's loopback interface. Use synthetic test text only on a trusted local network, with no router port forwarding.
+
+On the Mac, start Ollama in its own Terminal if it is not already running, then check that both local models are installed:
+
+```sh
+ollama serve
+```
+
+```sh
+ollama list
+```
+
+If `RAG_ENABLED=true` in the private `.env`, start the existing local PostgreSQL 17 instance (for a Homebrew installation, `brew services start postgresql@17`) and check it with `pg_isready -h 127.0.0.1 -p 5432`. Keep `OLLAMA_MODEL=gemma3:12b`, `RULES_SHADOW_MODE=true`, and `VERDICT_POLICY=gemma`; use the current approved RAG database without reimporting knowledge. Generate a private `API_KEY` as described above if one is not already set.
+
+Find the Mac's Wi-Fi address with `ipconfig getifaddr en0`. In a new Terminal, replace `192.168.1.23` with that exact address and run:
+
+```sh
+cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
+caffeinate -i env APCIDA_DEV_LAN_HOST=192.168.1.23 node src/dev/lanServer.js
+```
+
+From the Android device on the same trusted Wi-Fi, open `http://192.168.1.23:3000/health` in a browser. A JSON `{"status":"ok"}` response confirms network reachability only. `/api/ai/status` checks Ollama availability. Stop the LAN launcher with Ctrl-C after testing. The app must never use `localhost` for the Mac over Wi-Fi. The Mac firewall may need to allow this Node process on the trusted network.
+
+The future Android **debug-only** manual screen should accept test SMS text, the Mac server URL, and an API key entered at runtime. It should send an explicit `POST /api/sms/analyze` with `x-api-key` and JSON containing `messageId` (a new UUID), `sender` (for example `ManualTest`), `text`, and `receivedAt` (ISO 8601 timestamp with offset). It should display `classification` (`SCAM`, `SAFE`, or `SUSPICIOUS`), `confidence`, and `rationale`; show a clear unavailable, timeout, authorization, or malformed-response error; and leave the local verdict and notifications untouched. Network work belongs off the main thread, with a short connection timeout and a bounded overall timeout that accounts for embedding plus Gemma inference. A debug build may need Android Internet permission and a debug-only cleartext HTTP allowance for this LAN address. Do not persist the API key, log message text or credentials, read the inbox for this screen, or trigger this request from the SMS receiver. No Android APK can be built or tested until that project is added to the workspace.
+
+The backend tests cover the API's response fields, all three classifications, authentication, Ollama unavailable and timeout errors, malformed inference responses, and the absence of analysis until a POST is made. Android UI, client timeout, no-upload, and local-classifier preservation tests remain to be implemented in the Android project. Defer quantitative real-SMS evaluation until the independently labeled dataset is ready.
+
+## Phase 3C: synthetic API checks without Android hardware
+
+The existing endpoint is `POST /api/sms/analyze`. It requires the `x-api-key` header and a JSON object with exactly `messageId`, `sender`, `text`, and `receivedAt` (ISO 8601 with offset). Success is HTTP 200 with `messageId`, `classification` (`SCAM`, `SAFE`, or `SUSPICIOUS`), `confidence` (`HIGH`, `MEDIUM`, or `LOW`), `rationale`, `model`, and `processingTimeMs`. When rules are enabled in shadow mode, the response also contains `gemmaClassification`, `rules`, and `verdictPolicy: "shadow"`. The actual model decides the classification; the three synthetic probes below are examples, not guaranteed expected labels.
+
+Start Ollama if needed (`ollama serve` or the Ollama app). If `.env` has `RAG_ENABLED=true`, start the existing local PostgreSQL 17 service; for Homebrew, use `brew services start postgresql@17`. Keep the private `.env` values `OLLAMA_MODEL=gemma3:12b`, `RULES_SHADOW_MODE=true`, and `VERDICT_POLICY=gemma`. Find the Mac's private IP with `ipconfig getifaddr en0` or macOS Network settings. Stop any earlier server process on port 3000, then start the development server with the current IP:
+
+```sh
+cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
+caffeinate -i env APCIDA_DEV_LAN_HOST=192.168.1.72 node src/dev/lanServer.js
+```
+
+Replace `192.168.1.72` if the Mac's address changes. `/health` tests Express reachability; `/api/ai/status` checks that Ollama reports `gemma3:12b` available. Neither performs SMS inference.
+
+The commands below load the key from the local ignored `.env` and pipe it to curl through standard input. The key does not appear in the command line, source, or normal output. Use the generated hexadecimal key described above; the helper rejects quotes, backslashes, or line breaks in a key because they are unsafe in a curl config line. Run the three requests **sequentially**:
+
+```sh
+cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
+APCIDA_PHASE3C_URL=http://192.168.1.72:3000
+phase3c_header() {
+  node -e 'require("dotenv").config({ quiet: true }); const key = process.env.API_KEY; if (!key || /[\r\n"\\]/.test(key)) { process.stderr.write("API_KEY missing or unsuitable for curl config\n"); process.exit(1); } process.stdout.write(`header = "x-api-key: ${key}"\n`);'
+}
+phase3c_post() {
+  phase3c_header | curl --config - --silent --show-error --max-time 270 \
+    --write-out '\nHTTP %{http_code}\n' \
+    --header 'content-type: application/json' \
+    --data-binary "$1" "$APCIDA_PHASE3C_URL/api/sms/analyze"
+}
+phase3c_post '{"messageId":"phase3c-scam","sender":"ManualTest","text":"Your government payment is overdue. Pay PHP 3500 at https://tax-update.example/pay and enter your bank OTP to avoid arrest.","receivedAt":"2026-10-27T12:00:00+08:00"}'
+phase3c_post '{"messageId":"phase3c-safe","sender":"ManualTest","text":"Library reminder: Your reserved book is ready for pickup at the branch tomorrow. No payment or login is needed.","receivedAt":"2026-10-27T12:00:00+08:00"}'
+phase3c_post '{"messageId":"phase3c-ambiguous","sender":"ManualTest","text":"Your delivery is on hold. Update your address at https://parcel-help.example to avoid return.","receivedAt":"2026-10-27T12:00:00+08:00"}'
+```
+
+Each response should end in `HTTP 200` and contain a recognized classification, confidence, nonempty rationale, matching `messageId`, and `model: "gemma3:12b"`. Inspect any unexpected verdict rather than adjusting the frozen model, prompts, rules, or evaluation labels from these three examples. The `.example` domains are non-operational placeholders.
+
+On 27 October 2026, one sequential run against the private LAN server returned `SCAM/HIGH`, `SAFE/HIGH`, and `SUSPICIOUS/MEDIUM` respectively, all with HTTP 200 and `verdictPolicy: "shadow"`. These three synthetic probes check API connectivity and response handling; they are not an accuracy evaluation, and later model responses can differ.
+
+Check request errors without making Ollama infer anything for these cases:
+
+```sh
+curl --silent --show-error --write-out '\nHTTP %{http_code}\n' \
+  --header 'content-type: application/json' \
+  --data-binary '{"messageId":"missing-key","sender":"ManualTest","text":"Synthetic test","receivedAt":"2026-10-27T12:00:00+08:00"}' \
+  "$APCIDA_PHASE3C_URL/api/sms/analyze"
+printf 'header = "x-api-key: deliberately-wrong"\n' | curl --config - --silent --show-error \
+  --write-out '\nHTTP %{http_code}\n' --header 'content-type: application/json' \
+  --data-binary '{"messageId":"wrong-key","sender":"ManualTest","text":"Synthetic test","receivedAt":"2026-10-27T12:00:00+08:00"}' \
+  "$APCIDA_PHASE3C_URL/api/sms/analyze"
+phase3c_post '{bad json'
+phase3c_post '{"messageId":"missing-text","sender":"ManualTest","receivedAt":"2026-10-27T12:00:00+08:00"}'
+```
+
+The first two return HTTP 401 `UNAUTHORIZED`; malformed JSON returns HTTP 400 `INVALID_JSON`; missing text returns HTTP 400 `INVALID_REQUEST` with `fields: ["text"]`. `npm test` covers unavailable Ollama, embedding failures when RAG is enabled, and request timeouts with mocks. A live unavailable-service check would require deliberately stopping Ollama; with RAG enabled it can return `EMBEDDING_UNAVAILABLE` (503), while chat-only mode returns `OLLAMA_UNAVAILABLE` (503). Timeout codes are `EMBEDDING_TIMEOUT` or `OLLAMA_TIMEOUT` (504). Do not change timeout limits merely to force an error.
+
+After the curl checks, run `unset -f phase3c_header phase3c_post` and `unset APCIDA_PHASE3C_URL`.
+
+For iPhone Safari on the same trusted Wi-Fi, restart the LAN launcher above and open `http://192.168.1.72:3000/manual-test` using the current Mac IP. The small page is served **only** by the development launcher; normal `npm start` returns 404 for it. Enter the private API key, type synthetic text, check the synthetic confirmation, and tap Analyze. The page uses the same authenticated endpoint, clears the key after each request, and does not use local storage, URL parameters, or inbox access. Its page and analysis responses are marked `no-store`; use a private browser tab and clear the form because browser autofill behavior is outside the page's control. HTTP on a LAN does not encrypt the key or message; use only a trusted network and synthetic text, avoid router port forwarding, and rotate the development key after testing if the network was not fully trusted. This tests browser-to-server connectivity and the API, not Android app behavior.
 
 The holdout is synthetic and comes from the same 200-message source as the development and historical sets. Treat its results as an independent check within that corpus, not as a measure of real-world performance. Do not alter labels, rules, prompt, policy, model, or approved RAG records in response to holdout results; record any proposed changes for a future dataset and evaluation phase.
