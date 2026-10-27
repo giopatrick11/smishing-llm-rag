@@ -1,0 +1,17 @@
+# Local secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+.envrc
+
+# Dependencies and generated output
+node_modules/
+coverage/
+.nyc_output/
+*.log
+/evaluation-results/
+
+# macOS and editor files
+.DS_Store
+*.swp
+*.swo

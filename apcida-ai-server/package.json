@@ -7,12 +7,22 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "evaluate": "node src/evaluation/cli.js",
+    "evaluation:subset": "node src/evaluation/makeSubset.js",
+    "evaluation:development-set": "node src/evaluation/makeDevelopmentSet.js",
+    "evaluation:holdout-set": "node src/evaluation/makeHoldoutSet.js",
+    "phase2g": "node src/evaluation/phase2g.js",
+    "knowledge": "node src/knowledge/cli.js",
+    "db:migrate": "node src/db/migrate.js",
     "test": "node --test"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
+    "pg": "^8.17.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
