@@ -3,9 +3,9 @@ const { resolveVerdict } = require('./verdict');
 
 function createHybridService(analysisService, { shadowMode = true, verdictPolicy = 'gemma' } = {}) {
   return {
-    async analyze(sms) {
+    async analyze(sms, options = {}) {
       const rules = analyzeRules(sms);
-      const gemma = await analysisService.analyze(sms);
+      const gemma = await analysisService.analyze(sms, options);
       const verdict = resolveVerdict(gemma.classification, rules, {
         shadowMode, policy: verdictPolicy, gemmaConfidence: gemma.confidence, ragContext: gemma.ragContext,
       });

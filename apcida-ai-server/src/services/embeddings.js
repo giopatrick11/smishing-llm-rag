@@ -4,14 +4,15 @@ const EMBEDDING_MODEL = 'nomic-embed-text';
 const EMBEDDING_DIMENSIONS = 768;
 
 function createEmbeddingService(config, fetchImpl = fetch) {
-  async function embed(text) {
+  async function embed(text, { signal } = {}) {
     let response;
     try {
       response = await fetchImpl(`${config.ollamaUrl}/api/embed`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ model: EMBEDDING_MODEL, input: text }),
-        signal: AbortSignal.timeout(config.requestTimeoutMs),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)])
+          : AbortSignal.timeout(config.requestTimeoutMs),
       });
     } catch (error) {
       if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new OllamaError('EMBEDDING_TIMEOUT', 504);

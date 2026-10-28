@@ -1,11 +1,15 @@
 const { Pool } = require('pg');
 
-function createDatabasePool(databaseUrl) {
+function createDatabasePool(databaseUrl, { statementTimeoutMillis } = {}) {
   const pool = new Pool({
     connectionString: databaseUrl,
     max: 2,
     connectionTimeoutMillis: 5000,
     idleTimeoutMillis: 10000,
+    ...(statementTimeoutMillis === undefined ? {} : {
+      statement_timeout: statementTimeoutMillis,
+      query_timeout: statementTimeoutMillis + 1000,
+    }),
   });
   pool.on('error', () => {
     process.stderr.write('RAG database connection error\n');

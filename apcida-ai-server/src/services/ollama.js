@@ -22,12 +22,13 @@ function mapFetchError(error) {
 }
 
 function createOllamaService(config, fetchImpl = fetch) {
-  async function request(path, options = {}) {
+  async function request(path, options = {}, signal) {
     let response;
     try {
       response = await fetchImpl(`${config.ollamaUrl}${path}`, {
         ...options,
-        signal: AbortSignal.timeout(config.requestTimeoutMs),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMs)])
+          : AbortSignal.timeout(config.requestTimeoutMs),
       });
     } catch (error) {
       throw mapFetchError(error);
@@ -54,7 +55,7 @@ function createOllamaService(config, fetchImpl = fetch) {
     return { ollamaAvailable: true, modelAvailable, model: config.model };
   }
 
-  async function analyze(sms, examples = []) {
+  async function analyze(sms, examples = [], { signal } = {}) {
     const messages = [{ role: 'system', content: SYSTEM_PROMPT }];
     if (examples.length) {
       messages.push({ role: 'system', content: RAG_PROMPT });
@@ -73,7 +74,7 @@ function createOllamaService(config, fetchImpl = fetch) {
         format: analysisJsonSchema,
         messages,
       }),
-    });
+    }, signal);
 
     let parsed;
     try {

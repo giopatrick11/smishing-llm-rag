@@ -18,15 +18,17 @@ function createRagService(config, ollama, knowledgeRepository, fetchImpl, { incl
   if (!knowledgeRepository) throw new Error('RAG requires a knowledge repository');
   const embeddings = createEmbeddingService(config, fetchImpl);
   return {
-    async analyze(sms) {
-      const vector = await embeddings.embed(sms.text);
+    async analyze(sms, options = {}) {
+      const vector = await embeddings.embed(sms.text, options);
+      options.signal?.throwIfAborted();
       let examples;
       try {
         examples = await knowledgeRepository.search(vector);
       } catch {
         throw new RagError();
       }
-      const result = await ollama.analyze(sms, examples);
+      options.signal?.throwIfAborted();
+      const result = await ollama.analyze(sms, examples, options);
       return includeContext ? { ...result, ragContext: summarizeContext(examples) } : result;
     },
   };

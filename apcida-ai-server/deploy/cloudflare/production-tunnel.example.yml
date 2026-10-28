@@ -1,0 +1,9 @@
+# Preparation template only. Do not publish a route until Access and the
+# Android authentication design have been reviewed and separately approved.
+tunnel: 00000000-0000-4000-8000-000000000000
+credentials-file: /ABSOLUTE/PRIVATE/PATH/00000000-0000-4000-8000-000000000000.json
+
+ingress:
+  - hostname: sms.example.com
+    service: http://127.0.0.1:3020
+  - service: http_status:404
