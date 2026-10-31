@@ -1,0 +1,201 @@
+﻿message_id,sms_text,label
+SF090,Reminder: Your bus departs at 5:45 AM. Please arrive at the terminal early.,SAFE
+SC088,A customs agent is holding your package. Pay a special clearance deposit to our private wallet.,SCAM
+SF081,"Your bank transfer of PHP 1,250 was successful. Reference BQ78102.",SAFE
+SF063,"Dear resident, garbage collection has moved to Wednesday this week.",SAFE
+SF077,Your package delivery attempt was unsuccessful. A new attempt is scheduled tomorrow.,SAFE
+SC069,Collection warning: settle a made-up court fine using the wallet number below today.,SCAM
+SF053,Please confirm whether you can attend the project review meeting at 4 PM.,SAFE
+SF062,Your bank card delivery is scheduled for Tuesday. No payment is requested by text.,SAFE
+SC006,Your payroll deposit failed. Update your banking credentials using https://salary-update.example.invalid.,SCAM
+SF037,"Your OTP is 129388 for your login attempt. If this wasn't you, contact support via the official app.",SAFE
+SF002,Your verification code is 583214. Do not share this code with anyone.,SAFE
+SF049,Your ticket for the 7:00 PM movie was confirmed. Booking ID M4815.,SAFE
+SF096,May meeting tayo mamayang 6 PM. Pakisabi kung malelate ka.,SAFE
+SC018,We will publish your private photos unless you send us money today.,SCAM
+SF054,Your library account will expire next month. Renew at the circulation desk.,SAFE
+SF014,We received your support request and assigned ticket number 49218.,SAFE
+SC030,Gikan mi sa bank security. I-reply ang PIN aron malikayan ang pag-lock sa imong account.,SCAM
+SF003,Your parcel was delivered to the front desk at 2:15 PM.,SAFE
+SC011,I am your manager. Buy prepaid gift cards and send me the codes immediately.,SCAM
+SF089,Salamat sa imong pag-order. I-deliver ang pagkaon sa alas dose.,SAFE
+SF078,We noticed unusual sign-in activity. Open your official banking app to review and secure your account.,SAFE
+SF056,Your mobile plan renewal is scheduled for the 15th of next month.,SAFE
+SC068,We are from your mobile network. Reply with the SMS code you received for SIM reactivation.,SCAM
+SF031,Magkakaroon ng maintenance sa internet bukas ng madaling araw.,SAFE
+SC093,Your loan application is approved. Provide your online banking password to receive funds.,SCAM
+SF001,Your appointment is confirmed for tomorrow at 9:00 AM. Please arrive 10 minutes early.,SAFE
+SF013,The weather office has issued a rainfall advisory for your area. Stay updated through official channels.,SAFE
+SC034,HR ito. I-update ang payroll password mo sa https://hr-login.example.invalid para sumahod.,SCAM
+SC063,Your package is delayed. Pay the small redelivery fee at https://shipment-fee.example.invalid.,SCAM
+SC045,Your crypto funds are stuck. Pay a withdrawal tax in advance to release them.,SCAM
+SC027,Dili ma-deliver ang parcel kung dili ka mobayad sa fee sa https://courier-release.example.invalid.,SCAM
+SF079,"Security reminder: Never give your OTP, PIN, or password to anyone claiming to be support.",SAFE
+SC094,We have locked your payment account. Send the OTP from your phone immediately.,SCAM
+SC016,Your loan is guaranteed with no checks. Deposit an upfront insurance fee first.,SCAM
+SF043,Your bank statement for September is now available through online banking.,SAFE
+SC050,Prize center: Reveal the OTP we just sent so we can send your winnings.,SCAM
+SC070,"May claim ka sa cash assistance, pero kailangan ng advance processing payment.",SCAM
+SC074,This is the parcel office. Use https://courier-confirm.example.invalid to enter your card CVV.,SCAM
+SC023,Palihug i-click ang https://verify-wallet.example.invalid ug i-type imong password para dili ma-suspend.,SCAM
+SC086,Palihug ibutang imong bank password sa https://helpdesk-login.example.invalid para ma-reactivate.,SCAM
+SC002,Bank security alert: Reply with your one-time PIN so we can unlock your account.,SCAM
+SF030,Naa koy extra notes sa lecture. Ipadala nako nimo ugma.,SAFE
+SF100,The university registrar has confirmed receipt of your enrollment documents.,SAFE
+SC052,Your card is compromised. Send a photo of the front and back of your card now.,SCAM
+SF008,Your class schedule has been updated. Please check the student portal.,SAFE
+SC014,A relative was injured. Send money to this unfamiliar account before we can explain.,SCAM
+SC013,We are investigating fraud in your wallet. Please disclose the six-digit verification code.,SCAM
+SF009,Your internet service maintenance is scheduled from 1 AM to 3 AM.,SAFE
+SC083,We can erase your traffic violation if you pay a fixer using this personal account.,SCAM
+SF073,Congratulations on completing the online course! Your certificate is ready.,SAFE
+SF047,Your loan payment is due November 5. View details in the official bank app.,SAFE
+SC038,May multa ka raw sa traffic. Bayaran sa personal wallet account sa loob ng isang oras.,SCAM
+SF045,Your mobile load purchase of PHP 100 was successful.,SAFE
+SC067,Urgent payroll update: submit your bank login at https://employee-check.example.invalid.,SCAM
+SC097,Your account was flagged for money laundering. Pay a small clearing fee to avoid investigation.,SCAM
+SF084,Notice: The scholarship orientation will take place at 10 AM in Room 204.,SAFE
+SC031,Mabablock ang bank account mo ngayong araw. Ibigay ang OTP para ma-verify namin.,SCAM
+SF082,Sari-sari store update: Your prepaid order is ready to collect after lunch.,SAFE
+SF032,"Naka-schedule ang checkup mo sa Lunes, 8:30 AM.",SAFE
+SF024,Ang imong package na-deliver na sa guardhouse ganihang hapon.,SAFE
+SF011,Your order #A482 is now packed and will be shipped tomorrow.,SAFE
+SC025,Kinahanglan namo ang CVV sa imong card aron makansela ang kahina-hinalang transaksiyon.,SCAM
+SF051,This is a reminder of your remaining tuition balance in the university portal.,SAFE
+SC005,We detected suspicious transactions. Send your card number and CVV for verification.,SCAM
+SF022,Nadawat namo imong bayad sa tubig. Salamat kaayo.,SAFE
+SC090,Claim your pandemic relief benefit by transferring the verification fee first.,SCAM
+SC021,Ma-block imong e-wallet karong gabii. Ipadala ang OTP aron ma-recover ang account.,SCAM
+SF070,Your electricity payment was posted successfully with reference EL4939.,SAFE
+SC012,Your delivery address is incomplete. Enter your card details at https://delivery-fix.example.invalid.,SCAM
+SC022,Nakadaug ka og cash reward! Bayri una ang processing fee aron makuha ang premyo.,SCAM
+SF076,Your appointment has been canceled as requested. No further action needed.,SAFE
+SF085,Your job interview is scheduled for October 30 at 2 PM. Please reply to confirm attendance.,SAFE
+SC024,"Ako ang imong boss, paliti kog gift cards karon ug ipadala ang mga code.",SCAM
+SF080,Your payment did not go through. You may retry by opening the merchant app yourself.,SAFE
+SF025,Adunay scheduled brownout sa inyong barangay ugma gikan alas nuebe hangtod alas dose.,SAFE
+SC062,Naay problema sa imong online banking. Ihatag imong username ug password sa among agent.,SCAM
+SF019,Your ride has arrived at the designated pickup area.,SAFE
+SF071,"Payment reminder: Your insurance premium is due in seven days, as listed in your policy.",SAFE
+SC065,Your credit limit increased! Pay a nonrefundable activation fee through this individual wallet.,SCAM
+SC046,Payment was unsuccessful. Download and install the attached APK to complete verification.,SCAM
+SC035,"Ako ang supervisor mo. Ipadala agad ang gift card codes, huwag muna tumawag.",SCAM
+SC007,"Urgent: transfer PHP 3,000 to this personal wallet to stop your account from being frozen.",SCAM
+SC020,"Your subscription will be charged PHP 9,999 unless you enter your login at https://stop-billing.example.invalid.",SCAM
+SC043,Recruiter: You got the job! Pay an onboarding deposit to secure the position.,SCAM
+SF058,Your application was received. We will notify you after review is complete.,SAFE
+SF065,Your workshop certificate is now available from the event organizer.,SAFE
+SF020,Your requested laboratory result is ready for collection at the clinic.,SAFE
+SF039,Handa na ang gamot mo para kunin sa botika.,SAFE
+SC095,You received an e-wallet bonus. Pay PHP 199 to unlock your free bonus funds.,SCAM
+SC048,This is a police officer. Pay a settlement to this wallet or you will be arrested tonight.,SCAM
+SF059,A scheduled system upgrade may temporarily affect online payments tonight.,SAFE
+SC053,Ang iyong account ay makakansela. I-reply ang password bago mag-6 PM.,SCAM
+SC072,Your friend is in custody. Wire money to a stranger immediately to release them.,SCAM
+SF005,Thank you for your payment of PHP 420. Your reference number is TXN1042.,SAFE
+SC054,Ang parcel ay ibabalik sa sender. Bayaran ang handling fee sa bagong link.,SCAM
+SC010,The bank needs your PIN to reverse an unauthorized transaction. Reply now.,SCAM
+SF095,Please bring your printed assignment to the laboratory session on Friday.,SAFE
+SF040,Walang pasok bukas ayon sa opisyal na anunsyo ng paaralan.,SAFE
+SC056,We are the refund desk. Enter your full card details to claim the reversal.,SCAM
+SF034,Salamat sa pagbabayad. Narito ang transaction reference: PH20391.,SAFE
+SF012,Reminder: Dental cleaning on November 2 at 10:30 AM.,SAFE
+SF091,The barangay health center offers free blood pressure checks this Saturday.,SAFE
+SF061,Your tax filing acknowledgment number is REF88219. Keep it for your records.,SAFE
+SF067,Nagpadala ako ng reviewer sa email mo. Pakitingnan bago ang quiz.,SAFE
+SC033,May delivery problem. Ilagay ang credit card number sa https://track-fix.example.invalid.,SCAM
+SF017,Happy birthday! Hope you enjoy your day with your family.,SAFE
+SF097,Your savings account earned interest for the month. See your statement for details.,SAFE
+SC044,Your scholarship will be forfeited unless you share your mobile banking login.,SCAM
+SC026,Naay urgent hospital bill si Mama. I-send ang kwarta sa bag-ong account nga akong ihatag; ayaw na pagtawag.,SCAM
+SF006,The community meeting will begin at 3 PM in the multipurpose hall.,SAFE
+SC003,You won a cash prize! Pay a processing fee of PHP 250 to receive it.,SCAM
+SF088,Your annual account summary can now be viewed inside the official portal.,SAFE
+SC079,We noticed a failed payment. Open the APK in this text to reinstall your banking app.,SCAM
+SF092,Your credit card payment was received. Updated balance is available in the app.,SAFE
+SF098,Your pharmacy order is ready. Please show your order number at the counter.,SAFE
+SC059,Your device has a virus. Install our remote access tool and provide your banking codes.,SCAM
+SC082,Account suspension pending. Verify both your password and recovery code in this reply.,SCAM
+SC100,Security advisory: Reply with the password and security code or the account gets terminated.,SCAM
+SF036,Dumating na ang package mo at iniwan sa reception.,SAFE
+SF018,The water district advises low pressure during scheduled pipeline repairs.,SAFE
+SC075,Your balance will expire tonight unless you move it to this new secure wallet.,SCAM
+SF094,Your attendance for today's training has been recorded successfully.,SAFE
+SF023,Palihug abot ug 15 minutos sayo sa imong appointment sa klinika.,SAFE
+SF050,Courier update: Your driver is en route with order ORD2183.,SAFE
+SC058,A government assistance slot is reserved for you. Send an activation deposit immediately.,SCAM
+SC080,"Your investment earned PHP 100,000. Send withdrawal fees to access the profit.",SCAM
+SF044,Your e-wallet received PHP 500 from your saved contact.,SAFE
+SC087,"May libreng scholarship, magpadala lang muna ng reservation payment sa personal number.",SCAM
+SF016,Thank you for registering for the workshop. The session begins at 1 PM.,SAFE
+SF072,May bagong announcement sa official class group tungkol sa room assignment.,SAFE
+SF010,The library book you reserved can be collected until Friday.,SAFE
+SF069,The school clinic requests you to bring your vaccination record on Monday.,SAFE
+SC055,Naka-approve ang housing loan mo. Magbayad muna ng release charge bago maipadala.,SCAM
+SC057,Your payroll has changed. Transfer your salary to this new personal account to confirm.,SCAM
+SC089,Your business listing will disappear unless you disclose the administrator login code.,SCAM
+SF057,Reminder from the clinic: Fasting is required before tomorrow's blood test.,SAFE
+SF041,Bank notice: PHP 250.00 was debited for your card purchase at Grocery Center.,SAFE
+SC004,Your parcel is held by customs. Pay a release fee at https://parcel-pay.example.invalid.,SCAM
+SF087,Your data bundle has 250 MB remaining and expires tonight.,SAFE
+SF038,"Paalala: May examination bukas, dalhin ang iyong school ID.",SAFE
+SC015,Your tax refund is approved. Pay an identity-check charge before collecting it.,SCAM
+SC076,HR notice: Failure to click this link and provide password will cancel your employment.,SCAM
+SF064,Ang inyong tubig mahimong hinay ugma tungod sa maintenance work.,SAFE
+SF093,Our team has closed support ticket 7118 after resolving the technical issue.,SAFE
+SF099,The booking was rescheduled successfully to November 9 at 1 PM.,SAFE
+SF007,Your prescription is ready for pickup during pharmacy business hours.,SAFE
+SF068,Your vehicle registration appointment is booked at 1:15 PM on November 6.,SAFE
+SC039,Naka-hold ang remittance mo. Sagutin ang message na ito kasama ang iyong login password.,SCAM
+SF066,Nakatakda ang barangay assembly karong Domingo sa covered court.,SAFE
+SF042,Security alert: A new device signed in to your account. Review activity in the official app if unrecognized.,SAFE
+SC073,Our bank officer will help you; first share the password used for your app.,SCAM
+SC040,Suspended ang e-wallet mo. I-click ang fake-verify.example.invalid at ilagay ang one-time code.,SCAM
+SC071,Na-block ang account mo. Ipadala ang iyong verification code sa numerong ito.,SCAM
+SC092,Customer support will resolve the problem if you approve an unexpected login prompt now.,SCAM
+SC001,Your account will be disabled today. Enter your password at https://account-review.example.invalid to prevent suspension.,SCAM
+SC019,Verify your identity by replying with your banking password and security answers.,SCAM
+SF046,A payment of PHP 899.00 was processed for your monthly subscription.,SAFE
+SF021,Maayong buntag! Ang klase magsugod ug alas otso ugma.,SAFE
+SC078,Congratulations on your raffle win. Text back your bank PIN to confirm the award.,SCAM
+SC096,Naay delivery fee kulang. Pagsulod sa imong card details sa https://fast-delivery.example.invalid.,SCAM
+SC008,Your SIM registration has expired. Upload your ID and OTP to https://sim-restore.example.invalid.,SCAM
+SF004,Your electricity bill for October is available in the official app.,SAFE
+SC037,Magpapadala kami ng ayuda pagkatapos mong magbayad ng verification fee.,SCAM
+SC028,Na-expire imong SIM. I-submit ang ID ug verification code sa among link karon.,SCAM
+SF035,"Ang meeting ng mga magulang ay sa Biyernes, alas tres ng hapon.",SAFE
+SC047,We can recover your stolen funds. First send a recovery fee to our representative.,SCAM
+SC081,I am an agent from your bank. Disable two-factor authentication by giving me the OTP.,SCAM
+SF028,Naa nay update sa imong application. Tan-awa ang opisyal nga student portal.,SAFE
+SC060,You were accidentally sent money. Send it back to this other account before contacting support.,SCAM
+SC064,A representative will reverse an unauthorized charge after you tell us your PIN.,SCAM
+SC077,Naay libre nga cash grant. Bayri lang ang validation charge una sa payout.,SCAM
+SC049,Customer service asks that you screen-share while you enter your banking password.,SCAM
+SF083,The hospital queue number assigned to you is 0187. Please wait for your turn.,SAFE
+SF075,Ang inyong conference registration kay confirmed na. Kita-kits sa Sabado.,SAFE
+SF086,Meeting link and agenda have been sent to your registered email address.,SAFE
+SF060,Your service appointment was moved to Thursday at 11 AM.,SAFE
+SF033,Na-credit na ang sweldo mo sa iyong regular bank account.,SAFE
+SF026,Ang imong OTP kay 427619. Ayaw kini ihatag bisan kinsa.,SAFE
+SF029,Andam na imong order para pickup sa tindahan hangtod alas sais.,SAFE
+SC084,Your social media profile will be permanently removed. Enter login credentials on our urgent form.,SCAM
+SF055,Your package tracking number is TRK192843. Status: In transit.,SAFE
+SC085,You are owed a tax refund. Provide your account password on https://tax-refund.example.invalid.,SCAM
+SC036,"Para maibalik ang nawalang pera, kailangan namin ang ATM PIN at CVV mo.",SCAM
+SF027,Salamat sa pag-apil sa community clean-up drive karong Sabado.,SAFE
+SF074,Your return request has been approved. Follow the instructions in your original purchase app.,SAFE
+SF052,A refund of PHP 320 has been credited to your original payment method.,SAFE
+SC032,"Nanalo ka ng PHP 75,000! Magbayad muna ng claim fee bago ma-release ang premyo.",SCAM
+SC091,This is a family member on a new number. I need money urgently; do not call my old number.,SCAM
+SC042,Your account was accessed overseas. Move your balance to our safe account immediately.,SCAM
+SC099,May nahuling fraudulent charge sa card mo. Ibigay ang CVV at expiry date para ma-cancel.,SCAM
+SC061,Bank alert: We need your six-digit OTP to verify a refund that you did not request.,SCAM
+SC066,You have won a smartphone. Submit your personal ID and payment of PHP 399 for shipping.,SCAM
+SC051,May lihim kang utang. Pumunta sa https://settle-debt.example.invalid at ilagay ang bank password.,SCAM
+SC029,Gidaug nimo ang scholarship grant. I-deposito una ang reservation fee sa personal nga GCash.,SCAM
+SC017,This is tech support. Install our remote-control application so we can fix your bank app.,SCAM
+SF015,Your payroll for the current period has been credited to your registered account.,SAFE
+SC098,"Ako ang imong teacher. Send me the school portal password to confirm enrollment, or your slot will be lost.",SCAM
+SC009,Congratulations! You have been selected for a grant. Send PHP 500 to activate your award.,SCAM
+SF048,Account notice: Your password was changed successfully. Contact support if unauthorized.,SAFE
+SC041,Security team: This message is an official test. Send us your OTP to pass the verification.,SCAM

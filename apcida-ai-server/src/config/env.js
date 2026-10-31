@@ -1,4 +1,8 @@
-require('dotenv').config({ quiet: true });
+// The controlled production listener receives an explicit private environment.
+// Never fill its missing settings from the development .env file.
+if (process.env.APCIDA_PRODUCTION_MODE !== 'controlled-test') {
+  require('dotenv').config({ quiet: true });
+}
 
 const { z } = require('zod');
 
@@ -46,8 +50,9 @@ function loadDatabaseUrl(environment = process.env) {
   return value;
 }
 
-function loadConfig(environment = process.env) {
-  const result = configSchema.safeParse(environment);
+function parseServerConfig(environment, requireApiKey) {
+  const schema = requireApiKey ? configSchema : configSchema.omit({ API_KEY: true });
+  const result = schema.safeParse(environment);
   if (!result.success) {
     const names = [...new Set(result.error.issues.map((issue) => issue.path.join('.')))];
     throw new Error(`Invalid configuration: ${names.join(', ')}`);
@@ -70,6 +75,15 @@ function loadConfig(environment = process.env) {
   };
 }
 
+function loadConfig(environment = process.env) {
+  return parseServerConfig(environment, true);
+}
+
+// The protected listener authenticates per installation and never reads the development API key.
+function loadProductionConfig(environment = process.env) {
+  return parseServerConfig(environment, false);
+}
+
 function loadEvaluationConfig(environment = process.env) {
   const result = configSchema.omit({ PORT: true, API_KEY: true }).safeParse(environment);
   if (!result.success) {
@@ -89,4 +103,4 @@ function loadEvaluationConfig(environment = process.env) {
   };
 }
 
-module.exports = { loadConfig, loadEvaluationConfig, loadDatabaseUrl };
+module.exports = { loadConfig, loadProductionConfig, loadEvaluationConfig, loadDatabaseUrl };

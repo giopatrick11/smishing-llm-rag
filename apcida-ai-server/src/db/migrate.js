@@ -5,7 +5,9 @@ const { Client } = require('pg');
 const { loadDatabaseUrl } = require('../config/env');
 
 function shouldApplyMigration(file, { includeProduction = false } = {}) {
-  return file !== '004_production_inference.sql' || includeProduction;
+  return !['004_production_inference.sql', '005_production_invites.sql',
+    '006_production_invite_cleanup.sql'].includes(file)
+    || includeProduction;
 }
 
 async function runMigrations(databaseUrl = loadDatabaseUrl(), { includeProduction = false } = {}) {
@@ -23,7 +25,7 @@ async function runMigrations(databaseUrl = loadDatabaseUrl(), { includeProductio
     const files = fs.readdirSync(migrationsDir).filter((file) => /^\d+_[a-z0-9_]+\.sql$/.test(file)).sort();
     const applied = [];
     for (const file of files) {
-      // Production inference tables require a separate controlled rollout decision.
+      // Production inference and invite tables require controlled-test opt-in.
       if (!shouldApplyMigration(file, { includeProduction })) continue;
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
       const checksum = createHash('sha256').update(sql).digest('hex');

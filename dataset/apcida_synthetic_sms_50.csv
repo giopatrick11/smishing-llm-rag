@@ -1,0 +1,51 @@
+message_id,sms_text,label
+SC069,Collection warning: settle a made-up court fine using the wallet number below today.,SCAM
+SF053,Please confirm whether you can attend the project review meeting at 4 PM.,SAFE
+SC006,Your payroll deposit failed. Update your banking credentials using https://salary-update.example.invalid.,SCAM
+SF049,Your ticket for the 7:00 PM movie was confirmed. Booking ID M4815.,SAFE
+SF096,May meeting tayo mamayang 6 PM. Pakisabi kung malelate ka.,SAFE
+SF054,Your library account will expire next month. Renew at the circulation desk.,SAFE
+SC011,I am your manager. Buy prepaid gift cards and send me the codes immediately.,SCAM
+SF056,Your mobile plan renewal is scheduled for the 15th of next month.,SAFE
+SC068,We are from your mobile network. Reply with the SMS code you received for SIM reactivation.,SCAM
+SC027,Dili ma-deliver ang parcel kung dili ka mobayad sa fee sa https://courier-release.example.invalid.,SCAM
+SC094,We have locked your payment account. Send the OTP from your phone immediately.,SCAM
+SC050,Prize center: Reveal the OTP we just sent so we can send your winnings.,SCAM
+SC023,Palihug i-click ang https://verify-wallet.example.invalid ug i-type imong password para dili ma-suspend.,SCAM
+SC014,A relative was injured. Send money to this unfamiliar account before we can explain.,SCAM
+SF009,Your internet service maintenance is scheduled from 1 AM to 3 AM.,SAFE
+SF073,Congratulations on completing the online course! Your certificate is ready.,SAFE
+SF047,Your loan payment is due November 5. View details in the official bank app.,SAFE
+SC038,May multa ka raw sa traffic. Bayaran sa personal wallet account sa loob ng isang oras.,SCAM
+SF082,Sari-sari store update: Your prepaid order is ready to collect after lunch.,SAFE
+SF032,"Naka-schedule ang checkup mo sa Lunes, 8:30 AM.",SAFE
+SC065,Your credit limit increased! Pay a nonrefundable activation fee through this individual wallet.,SCAM
+SC020,"Your subscription will be charged PHP 9,999 unless you enter your login at https://stop-billing.example.invalid.",SCAM
+SF065,Your workshop certificate is now available from the event organizer.,SAFE
+SF020,Your requested laboratory result is ready for collection at the clinic.,SAFE
+SC048,This is a police officer. Pay a settlement to this wallet or you will be arrested tonight.,SCAM
+SF059,A scheduled system upgrade may temporarily affect online payments tonight.,SAFE
+SC010,The bank needs your PIN to reverse an unauthorized transaction. Reply now.,SCAM
+SF040,Walang pasok bukas ayon sa opisyal na anunsyo ng paaralan.,SAFE
+SC044,Your scholarship will be forfeited unless you share your mobile banking login.,SCAM
+SC079,We noticed a failed payment. Open the APK in this text to reinstall your banking app.,SCAM
+SC082,Account suspension pending. Verify both your password and recovery code in this reply.,SCAM
+SF018,The water district advises low pressure during scheduled pipeline repairs.,SAFE
+SF050,Courier update: Your driver is en route with order ORD2183.,SAFE
+SF072,May bagong announcement sa official class group tungkol sa room assignment.,SAFE
+SF069,The school clinic requests you to bring your vaccination record on Monday.,SAFE
+SF057,Reminder from the clinic: Fasting is required before tomorrow's blood test.,SAFE
+SF087,Your data bundle has 250 MB remaining and expires tonight.,SAFE
+SC015,Your tax refund is approved. Pay an identity-check charge before collecting it.,SCAM
+SF093,Our team has closed support ticket 7118 after resolving the technical issue.,SAFE
+SF066,Nakatakda ang barangay assembly karong Domingo sa covered court.,SAFE
+SF042,Security alert: A new device signed in to your account. Review activity in the official app if unrecognized.,SAFE
+SC019,Verify your identity by replying with your banking password and security answers.,SCAM
+SC028,Na-expire imong SIM. I-submit ang ID ug verification code sa among link karon.,SCAM
+SF033,Na-credit na ang sweldo mo sa iyong regular bank account.,SAFE
+SF029,Andam na imong order para pickup sa tindahan hangtod alas sais.,SAFE
+SC084,Your social media profile will be permanently removed. Enter login credentials on our urgent form.,SCAM
+SC066,You have won a smartphone. Submit your personal ID and payment of PHP 399 for shipping.,SCAM
+SC017,This is tech support. Install our remote-control application so we can fix your bank app.,SCAM
+SC098,"Ako ang imong teacher. Send me the school portal password to confirm enrollment, or your slot will be lost.",SCAM
+SC041,Security team: This message is an official test. Send us your OTP to pass the verification.,SCAM

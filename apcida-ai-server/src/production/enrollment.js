@@ -29,5 +29,5 @@ async function revokeProductionInstallation(repository, installationId) {
   return repository.revoke(validateInstallationId(installationId));
 }
 
-module.exports = { validateInstallationId, enrollProductionInstallation,
+module.exports = { validateLabel, validateInstallationId, enrollProductionInstallation,
   revokeProductionInstallation };

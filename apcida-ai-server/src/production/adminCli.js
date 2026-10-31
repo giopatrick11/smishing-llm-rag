@@ -5,10 +5,11 @@ const { requireProductionAdmin } = require('./adminAuth');
 const { createProductionRepository, checkProductionRepository } = require('./repository');
 const { enrollProductionInstallation, revokeProductionInstallation,
   validateInstallationId } = require('./enrollment');
+const { createInviteRepository, issueInvite } = require('./inviteEnrollment');
 
 function parseCommand(args) {
   const [action, ...rest] = args;
-  if (action === 'enroll' && rest.length === 5 && rest[0] === '--label'
+  if (['enroll', 'invite'].includes(action) && rest.length === 5 && rest[0] === '--label'
     && rest[2] === '--out' && rest[4] === '--approve') {
     if (!rest[3].startsWith('/') || rest[3].includes('\n')) {
       throw new Error('Output must be an absolute file path');
@@ -18,7 +19,7 @@ function parseCommand(args) {
   if (['revoke', 'status'].includes(action) && rest.length === 2 && rest[0] === '--id') {
     return { action, id: validateInstallationId(rest[1]) };
   }
-  throw new Error('Usage: enroll --label NAME --out /absolute/private/file --approve | revoke --id UUID | status --id UUID');
+  throw new Error('Usage: enroll|invite --label NAME --out /absolute/private/file --approve | revoke --id UUID | status --id UUID');
 }
 
 async function main(args = process.argv.slice(2), env = process.env) {
@@ -28,11 +29,19 @@ async function main(args = process.argv.slice(2), env = process.env) {
   let pool;
   let completed = false;
   try {
-    if (command.action === 'enroll') fd = fs.openSync(command.output, 'wx', 0o600);
+    if (['enroll', 'invite'].includes(command.action)) fd = fs.openSync(command.output, 'wx', 0o600);
     pool = createDatabasePool(loadDatabaseUrl(env));
     await checkProductionRepository(pool);
     const repository = createProductionRepository(pool);
-    if (command.action === 'enroll') {
+    if (command.action === 'invite') {
+      const schema = await pool.query("SELECT to_regclass('public.production_enrollment_invites') AS invites");
+      if (!schema.rows[0]?.invites) throw new Error('Invite schema unavailable');
+      const result = await issueInvite(createInviteRepository(pool), { label: command.label });
+      fs.writeFileSync(fd, `${result.code}\n`, { encoding: 'utf8' });
+      fs.fsyncSync(fd);
+      completed = true;
+      process.stdout.write(`One-time invite saved to private file. Expires ${new Date(result.expiresAt).toISOString()}\n`);
+    } else if (command.action === 'enroll') {
       const result = await enrollProductionInstallation(repository, { label: command.label });
       try {
         fs.writeFileSync(fd, `${result.token}\n`, { encoding: 'utf8' });
@@ -54,7 +63,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
     }
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
-    if (command.action === 'enroll' && fd !== undefined && !completed) {
+    if (['enroll', 'invite'].includes(command.action) && fd !== undefined && !completed) {
       try { fs.unlinkSync(command.output); } catch { /* best effort cleanup */ }
     }
     if (pool) await pool.end();

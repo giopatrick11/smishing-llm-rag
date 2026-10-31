@@ -15,10 +15,23 @@ Run these commands in Terminal:
 ```sh
 cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
 npm ci
-printf 'API_KEY=%s\n' "$(openssl rand -hex 32)" > .env
+if [ ! -f .env ]; then
+  cp .env.example .env
+  chmod 600 .env
+  python3 - <<'PY'
+from pathlib import Path
+from secrets import token_hex
+path = Path('.env')
+text = path.read_text()
+placeholder = 'API_KEY=replace-with-a-long-random-secret'
+if placeholder not in text:
+    raise SystemExit('Expected API_KEY placeholder is missing from .env.example')
+path.write_text(text.replace(placeholder, f'API_KEY={token_hex(32)}', 1))
+PY
+fi
 ```
 
-The generated `.env` is ignored by Git. Optional settings can be added to it:
+This creates a private key only on first setup; it does **not** replace an existing `.env` or print the key. `.env` is ignored by Git. For the existing Gemma + RAG setup, confirm privately that `.env` has `OLLAMA_MODEL=gemma3:12b`, `RAG_ENABLED=true`, `RULES_ENABLED=true`, `RULES_SHADOW_MODE=true`, `VERDICT_POLICY=gemma`, and a `DATABASE_URL` pointing to the local `apcida` database. Do not paste the key or database password into chat or logs. Optional settings:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -32,11 +45,35 @@ The generated `.env` is ignored by Git. Optional settings can be added to it:
 
 The example values are in `.env.example`. Normal `npm start` always binds to `127.0.0.1`; only the separate manual development launcher below can bind a private LAN interface. Keep Ollama bound to localhost as well.
 
-## Start
+## Start the local server on the Mac
+
+Use separate Terminal windows. First, start Ollama **if it is not already running** (the Ollama app may start it automatically):
+
+```sh
+ollama serve
+```
+
+In another window, check the required models. If a model is missing, pull it once with `ollama pull gemma3:12b` or `ollama pull nomic-embed-text`:
+
+```sh
+ollama list
+curl -fsS http://127.0.0.1:11434/api/tags >/dev/null
+```
+
+When `.env` has `RAG_ENABLED=true`, start the existing local PostgreSQL database. For a Homebrew PostgreSQL 17 installation:
+
+```sh
+brew services start postgresql@17
+pg_isready -h 127.0.0.1 -p 5432
+```
+
+The approved RAG records are already in the existing `apcida` database; daily startup does not reimport them. A **new, empty** database needs the pgvector extension and `npm run db:migrate` before RAG can start. The migration creates the schema but does not populate approved knowledge. Do not point these commands at an unrelated database.
+
+Then start the loopback-only development API. `caffeinate` helps keep the Mac awake during a long Gemma request; leave this Terminal open and stop with `Ctrl-C`:
 
 ```sh
 cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
-npm start
+caffeinate -i npm start
 ```
 
 In a second Terminal window, check both health and model availability:
@@ -76,6 +113,47 @@ The values above illustrate the response format; the model decides the classific
 The model receives a fixed instruction to weigh concrete evidence in English, Filipino, or Cebuano. An OTP, urgent wording, or unfamiliar URL alone is not treated as proof of a scam. The model's JSON response is checked against a strict Zod schema before it is returned. A classification is an assessment of the SMS text, not independent verification of the sender or any URL.
 
 Error responses use codes such as `UNAUTHORIZED` (401), `INVALID_REQUEST` (400), `REQUEST_TOO_LARGE` (413), `RATE_LIMITED` (429), `OLLAMA_UNAVAILABLE` (503), `OLLAMA_OVERLOADED` (503), `OLLAMA_TIMEOUT` (504), and `OLLAMA_INVALID_RESPONSE` (502). They do not include raw SMS content or upstream error bodies.
+
+## Send synthetic test messages from Terminal
+
+The commands below use the local development API, load `API_KEY` from the ignored `.env` without showing it, and send **one synthetic message at a time**. Run them in a second Terminal while the server above stays open. A new UUID and timestamp are created for each request:
+
+```sh
+cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
+apcida_sms() {
+  local body
+  body=$(node -e 'const {randomUUID}=require("node:crypto"); process.stdout.write(JSON.stringify({messageId:randomUUID(),sender:"ManualTest",text:process.argv[1],receivedAt:new Date().toISOString()}))' "$1")
+  node -e 'require("dotenv").config({quiet:true}); const key=process.env.API_KEY; if(!key || /[\r\n"\\]/.test(key)){process.stderr.write("Missing or unsuitable API_KEY in .env\n");process.exit(1)} process.stdout.write(`header = "x-api-key: ${key}"\n`)' |
+    curl --config - --silent --show-error --max-time 270 \
+      --write-out '\nHTTP %{http_code}\n' \
+      -H 'content-type: application/json' \
+      --data-binary "$body" http://127.0.0.1:3000/api/sms/analyze
+}
+
+apcida_sms 'Your bank account is locked. Open https://example.invalid/verify and enter your password and OTP now.'
+apcida_sms 'Reminder: your appointment is tomorrow at 9 AM. No action is needed.'
+apcida_sms 'Your parcel delivery has a problem. Contact support to confirm details.'
+```
+
+Look for `HTTP 200` and `classification`, `confidence`, and `rationale` in each JSON response. SCAM, SAFE, and SUSPICIOUS are possible outputs; these examples do not guarantee a particular verdict. An error response is not a SAFE verdict. The API request is manual and does not read the Android inbox. To remove the temporary shell function, run `unset -f apcida_sms`.
+
+### Put a synthetic SMS into the Medium Phone emulator
+
+This tests the Android incoming-SMS and **offline keyword** path. It does **not** send that SMS to the AI server: Android's `PRODUCTION_READY` gate remains false. Start the existing Medium Phone AVD in another Terminal if it is not already running:
+
+```sh
+"$HOME/Library/Android/sdk/emulator/emulator" -avd Medium_Phone
+```
+
+Then, with the emulator booted and the ApCiDa debug app installed, use:
+
+```sh
+"$HOME/Library/Android/sdk/platform-tools/adb" devices -l
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 emu sms send 09170000000 'Your account is locked. Visit https://example.invalid/verify and enter your password and OTP.'
+"$HOME/Library/Android/sdk/platform-tools/adb" -s emulator-5554 emu sms send 09170000000 'Reminder: your appointment is tomorrow at 9 AM.'
+```
+
+The emulator console expects `sms send <phonenumber> <message>`. Check ApCiDa's Messages screen and notification permission. If `adb devices -l` shows a different emulator serial, replace `emulator-5554`. Use only synthetic text. For remote Gemma + RAG testing, use the authenticated `apcida_sms` commands above or the separate debug Secure Pilot Test with its own approved HTTPS host and installation credential; do not expect an injected SMS to upload automatically.
 
 ## Test
 

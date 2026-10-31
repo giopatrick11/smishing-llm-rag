@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.apcida.controlled-postgres</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/opt/postgresql@17/bin/postgres</string>
+    <string>-D</string>
+    <string>/Users/giopatrick/Library/Application Support/ApCiDa/controlled-server/postgres</string>
+    <string>-h</string><string>127.0.0.1</string>
+    <string>-p</string><string>55436</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>EnvironmentVariables</key>
+  <dict><key>LC_ALL</key><string>C.UTF-8</string></dict>
+  <key>StandardOutPath</key>
+  <string>/Users/giopatrick/Library/Application Support/ApCiDa/controlled-server/postgres.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/giopatrick/Library/Application Support/ApCiDa/controlled-server/postgres.stderr.log</string>
+</dict>
+</plist>

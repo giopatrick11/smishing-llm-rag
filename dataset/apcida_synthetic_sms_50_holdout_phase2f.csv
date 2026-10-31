@@ -1,0 +1,51 @@
+message_id,sms_text,label
+SF077,Your package delivery attempt was unsuccessful. A new attempt is scheduled tomorrow.,SAFE
+SF062,Your bank card delivery is scheduled for Tuesday. No payment is requested by text.,SAFE
+SF037,"Your OTP is 129388 for your login attempt. If this wasn't you, contact support via the official app.",SAFE
+SC018,We will publish your private photos unless you send us money today.,SCAM
+SF014,We received your support request and assigned ticket number 49218.,SAFE
+SF003,Your parcel was delivered to the front desk at 2:15 PM.,SAFE
+SF031,Magkakaroon ng maintenance sa internet bukas ng madaling araw.,SAFE
+SC093,Your loan application is approved. Provide your online banking password to receive funds.,SCAM
+SF013,The weather office has issued a rainfall advisory for your area. Stay updated through official channels.,SAFE
+SF079,"Security reminder: Never give your OTP, PIN, or password to anyone claiming to be support.",SAFE
+SC086,Palihug ibutang imong bank password sa https://helpdesk-login.example.invalid para ma-reactivate.,SCAM
+SC002,Bank security alert: Reply with your one-time PIN so we can unlock your account.,SCAM
+SF084,Notice: The scholarship orientation will take place at 10 AM in Room 204.,SAFE
+SC031,Mabablock ang bank account mo ngayong araw. Ibigay ang OTP para ma-verify namin.,SCAM
+SF022,Nadawat namo imong bayad sa tubig. Salamat kaayo.,SAFE
+SC021,Ma-block imong e-wallet karong gabii. Ipadala ang OTP aron ma-recover ang account.,SCAM
+SC012,Your delivery address is incomplete. Enter your card details at https://delivery-fix.example.invalid.,SCAM
+SC024,"Ako ang imong boss, paliti kog gift cards karon ug ipadala ang mga code.",SCAM
+SC046,Payment was unsuccessful. Download and install the attached APK to complete verification.,SCAM
+SC007,"Urgent: transfer PHP 3,000 to this personal wallet to stop your account from being frozen.",SCAM
+SC043,Recruiter: You got the job! Pay an onboarding deposit to secure the position.,SCAM
+SC072,Your friend is in custody. Wire money to a stranger immediately to release them.,SCAM
+SF005,Thank you for your payment of PHP 420. Your reference number is TXN1042.,SAFE
+SF095,Please bring your printed assignment to the laboratory session on Friday.,SAFE
+SF091,The barangay health center offers free blood pressure checks this Saturday.,SAFE
+SF061,Your tax filing acknowledgment number is REF88219. Keep it for your records.,SAFE
+SF097,Your savings account earned interest for the month. See your statement for details.,SAFE
+SC003,You won a cash prize! Pay a processing fee of PHP 250 to receive it.,SCAM
+SF036,Dumating na ang package mo at iniwan sa reception.,SAFE
+SC075,Your balance will expire tonight unless you move it to this new secure wallet.,SCAM
+SF023,Palihug abot ug 15 minutos sayo sa imong appointment sa klinika.,SAFE
+SC080,"Your investment earned PHP 100,000. Send withdrawal fees to access the profit.",SCAM
+SF016,Thank you for registering for the workshop. The session begins at 1 PM.,SAFE
+SC004,Your parcel is held by customs. Pay a release fee at https://parcel-pay.example.invalid.,SCAM
+SF068,Your vehicle registration appointment is booked at 1:15 PM on November 6.,SAFE
+SC039,Naka-hold ang remittance mo. Sagutin ang message na ito kasama ang iyong login password.,SCAM
+SC071,Na-block ang account mo. Ipadala ang iyong verification code sa numerong ito.,SCAM
+SC001,Your account will be disabled today. Enter your password at https://account-review.example.invalid to prevent suspension.,SCAM
+SF046,A payment of PHP 899.00 was processed for your monthly subscription.,SAFE
+SC096,Naay delivery fee kulang. Pagsulod sa imong card details sa https://fast-delivery.example.invalid.,SCAM
+SF035,"Ang meeting ng mga magulang ay sa Biyernes, alas tres ng hapon.",SAFE
+SC081,I am an agent from your bank. Disable two-factor authentication by giving me the OTP.,SCAM
+SC049,Customer service asks that you screen-share while you enter your banking password.,SCAM
+SF075,Ang inyong conference registration kay confirmed na. Kita-kits sa Sabado.,SAFE
+SF086,Meeting link and agenda have been sent to your registered email address.,SAFE
+SF055,Your package tracking number is TRK192843. Status: In transit.,SAFE
+SF074,Your return request has been approved. Follow the instructions in your original purchase app.,SAFE
+SC032,"Nanalo ka ng PHP 75,000! Magbayad muna ng claim fee bago ma-release ang premyo.",SCAM
+SC042,Your account was accessed overseas. Move your balance to our safe account immediately.,SCAM
+SC051,May lihim kang utang. Pumunta sa https://settle-debt.example.invalid at ilagay ang bank password.,SCAM

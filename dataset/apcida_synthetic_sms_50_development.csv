@@ -1,0 +1,51 @@
+message_id,sms_text,label
+SF090,Reminder: Your bus departs at 5:45 AM. Please arrive at the terminal early.,SAFE
+SC088,A customs agent is holding your package. Pay a special clearance deposit to our private wallet.,SCAM
+SF081,"Your bank transfer of PHP 1,250 was successful. Reference BQ78102.",SAFE
+SF063,"Dear resident, garbage collection has moved to Wednesday this week.",SAFE
+SF002,Your verification code is 583214. Do not share this code with anyone.,SAFE
+SF089,Salamat sa imong pag-order. I-deliver ang pagkaon sa alas dose.,SAFE
+SF078,We noticed unusual sign-in activity. Open your official banking app to review and secure your account.,SAFE
+SC045,Your crypto funds are stuck. Pay a withdrawal tax in advance to release them.,SCAM
+SC016,Your loan is guaranteed with no checks. Deposit an upfront insurance fee first.,SCAM
+SC070,"May claim ka sa cash assistance, pero kailangan ng advance processing payment.",SCAM
+SC074,This is the parcel office. Use https://courier-confirm.example.invalid to enter your card CVV.,SCAM
+SF030,Naa koy extra notes sa lecture. Ipadala nako nimo ugma.,SAFE
+SF045,Your mobile load purchase of PHP 100 was successful.,SAFE
+SC067,Urgent payroll update: submit your bank login at https://employee-check.example.invalid.,SCAM
+SF011,Your order #A482 is now packed and will be shipped tomorrow.,SAFE
+SF051,This is a reminder of your remaining tuition balance in the university portal.,SAFE
+SC022,Nakadaug ka og cash reward! Bayri una ang processing fee aron makuha ang premyo.,SCAM
+SF085,Your job interview is scheduled for October 30 at 2 PM. Please reply to confirm attendance.,SAFE
+SF080,Your payment did not go through. You may retry by opening the merchant app yourself.,SAFE
+SC062,Naay problema sa imong online banking. Ihatag imong username ug password sa among agent.,SCAM
+SC053,Ang iyong account ay makakansela. I-reply ang password bago mag-6 PM.,SCAM
+SC054,Ang parcel ay ibabalik sa sender. Bayaran ang handling fee sa bagong link.,SCAM
+SC056,We are the refund desk. Enter your full card details to claim the reversal.,SCAM
+SF034,Salamat sa pagbabayad. Narito ang transaction reference: PH20391.,SAFE
+SF012,Reminder: Dental cleaning on November 2 at 10:30 AM.,SAFE
+SC026,Naay urgent hospital bill si Mama. I-send ang kwarta sa bag-ong account nga akong ihatag; ayaw na pagtawag.,SCAM
+SF088,Your annual account summary can now be viewed inside the official portal.,SAFE
+SF092,Your credit card payment was received. Updated balance is available in the app.,SAFE
+SF044,Your e-wallet received PHP 500 from your saved contact.,SAFE
+SC055,Naka-approve ang housing loan mo. Magbayad muna ng release charge bago maipadala.,SCAM
+SC089,Your business listing will disappear unless you disclose the administrator login code.,SCAM
+SC076,HR notice: Failure to click this link and provide password will cancel your employment.,SCAM
+SF064,Ang inyong tubig mahimong hinay ugma tungod sa maintenance work.,SAFE
+SF099,The booking was rescheduled successfully to November 9 at 1 PM.,SAFE
+SC040,Suspended ang e-wallet mo. I-click ang fake-verify.example.invalid at ilagay ang one-time code.,SCAM
+SC078,Congratulations on your raffle win. Text back your bank PIN to confirm the award.,SCAM
+SC037,Magpapadala kami ng ayuda pagkatapos mong magbayad ng verification fee.,SCAM
+SC047,We can recover your stolen funds. First send a recovery fee to our representative.,SCAM
+SF028,Naa nay update sa imong application. Tan-awa ang opisyal nga student portal.,SAFE
+SC060,You were accidentally sent money. Send it back to this other account before contacting support.,SCAM
+SF026,Ang imong OTP kay 427619. Ayaw kini ihatag bisan kinsa.,SAFE
+SC085,You are owed a tax refund. Provide your account password on https://tax-refund.example.invalid.,SCAM
+SC036,"Para maibalik ang nawalang pera, kailangan namin ang ATM PIN at CVV mo.",SCAM
+SF027,Salamat sa pag-apil sa community clean-up drive karong Sabado.,SAFE
+SF052,A refund of PHP 320 has been credited to your original payment method.,SAFE
+SC091,This is a family member on a new number. I need money urgently; do not call my old number.,SCAM
+SC099,May nahuling fraudulent charge sa card mo. Ibigay ang CVV at expiry date para ma-cancel.,SCAM
+SC061,Bank alert: We need your six-digit OTP to verify a refund that you did not request.,SCAM
+SF015,Your payroll for the current period has been credited to your registered account.,SAFE
+SF048,Account notice: Your password was changed successfully. Contact support if unauthorized.,SAFE

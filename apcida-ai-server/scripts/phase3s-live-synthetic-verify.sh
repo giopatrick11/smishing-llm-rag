@@ -52,13 +52,13 @@ export RULES_SHADOW_MODE=true VERDICT_POLICY=gemma REQUEST_TIMEOUT_MS=90000
 node -e 'require("./src/db/migrate").runMigrations(process.env.DATABASE_URL,{includeProduction:true}).then(()=>process.stdout.write("Disposable staging migrations applied.\n"))'
 node src/staging/liveSyntheticCheck.js prepare
 node - <<'NODE'
-const { loadConfig } = require('./src/config/env');
+const { loadProductionConfig } = require('./src/config/env');
 const { productionSettings } = require('./src/production/server');
 const { createDatabasePool, checkRagDatabase } = require('./src/db/pool');
 const { checkProductionRepository } = require('./src/production/repository');
 (async () => {
   productionSettings();
-  const config = loadConfig();
+  const config = loadProductionConfig();
   const pool = createDatabasePool(config.databaseUrl);
   try { await checkRagDatabase(pool); await checkProductionRepository(pool); }
   finally { await pool.end(); }
@@ -77,3 +77,10 @@ for ((i=0; i<100; i++)); do
 done
 curl -fsS --max-time 1 http://127.0.0.1:3020/health >/dev/null
 node src/staging/liveSyntheticCheck.js verify
+
+if [[ ${APCIDA_PHASE3S_PHONE_PILOT:-} == true ]]; then
+  echo 'Controlled synthetic phone pilot is ready on 127.0.0.1:3020.'
+  echo "Private one-day installation token file: $APCIDA_PHASE3S_TOKEN_FILE"
+  echo 'Keep this terminal open. Press Control-C to stop and remove the disposable database.'
+  wait "$server_pid"
+fi

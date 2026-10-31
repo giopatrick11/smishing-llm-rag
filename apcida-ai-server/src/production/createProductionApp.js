@@ -22,7 +22,7 @@ function createAnalysisService(config, knowledgeRepository, fetchImpl) {
 }
 
 function createProductionApp(config, { repository, codec, knowledgeRepository, fetchImpl,
-  analysisService, audit = () => {}, rateLimit = 10, leaseSeconds = 300,
+  analysisService, inviteEnrollment, scheduleInviteCleanup, audit = () => {}, rateLimit = 10, leaseSeconds = 300,
   retentionSeconds = 86400, deadlineMs = 90000 } = {}) {
   assertProductionConfig(config);
   if (!repository || !['findByTokenHash', 'isActive', 'revoke', 'countRequest', 'claim', 'complete', 'release',
@@ -52,6 +52,23 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
   const auth = createInstallationAuth({
     findByTokenHash: repository.findByTokenHash.bind(repository), audit: safeAudit,
   });
+  if (inviteEnrollment) {
+    if (typeof inviteEnrollment.redeem !== 'function') throw new TypeError('Invite redemption required');
+    app.post('/api/v1/enrollment', createRateLimiter({ limit: 5 }),
+      express.json({ limit: '1kb', strict: true }), async (req, res) => {
+        if (!req.is('application/json') || !req.body ||
+          Object.keys(req.body).length !== 1 || typeof req.body.inviteCode !== 'string') {
+          return res.status(400).json({ error: 'INVALID_REQUEST' });
+        }
+        try {
+          const result = await inviteEnrollment.redeem(req.body.inviteCode);
+          return result ? res.status(201).json(result)
+            : res.status(401).json({ error: 'INVALID_INVITE' });
+        } catch {
+          return res.status(503).json({ error: 'ENROLLMENT_UNAVAILABLE' });
+        }
+      });
+  }
   let busy = false; // This controlled listener runs as exactly one process.
   // A consent-revoked installation can invalidate its own credential and erase its
   // response cache. Android does not invoke this route until a reviewed rollout.
@@ -63,6 +80,9 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
       }
       try {
         await repository.revoke(res.locals.installationId);
+        if (scheduleInviteCleanup) {
+          Promise.resolve().then(scheduleInviteCleanup).catch(() => {});
+        }
         safeAudit({ event: 'PRODUCTION_INSTALLATION_SELF_REVOKED',
           installationId: res.locals.installationId });
         return res.status(204).end();
@@ -149,6 +169,18 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
       }
       busy = true;
       safeAudit({ event: 'PRODUCTION_ANALYSIS_ACCEPTED', installationId });
+      const startedAt = process.hrtime.bigint();
+      let outcomeRecorded = false;
+      const elapsedMs = () => Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
+      res.once('finish', () => {
+        outcomeRecorded = true;
+        safeAudit({ event: 'PRODUCTION_ANALYSIS_FINISHED', installationId,
+          statusCode: res.statusCode, elapsedMs: elapsedMs() });
+      });
+      res.once('close', () => {
+        if (!outcomeRecorded) safeAudit({ event: 'PRODUCTION_ANALYSIS_DISCONNECTED',
+          installationId, elapsedMs: elapsedMs() });
+      });
       const cleanup = async () => {
         busy = false;
         // A completed row is retained for replay; only an unfinished lease is deleted.

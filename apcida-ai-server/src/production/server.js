@@ -1,9 +1,11 @@
-const { loadConfig } = require('../config/env');
+const { loadProductionConfig } = require('../config/env');
 const { createDatabasePool, checkRagDatabase } = require('../db/pool');
 const { createKnowledgeRepository } = require('../db/knowledgeRepository');
 const { createProductionRepository, checkProductionRepository } = require('./repository');
 const { createPrivacyCodec } = require('./privacy');
 const { assertProductionConfig, createProductionApp } = require('./createProductionApp');
+const { createInviteRepository, createCloudflareTokenClient,
+  redeemInvite, cleanupCloudflareTokens } = require('./inviteEnrollment');
 
 function productionSettings(env = process.env) {
   if (env.APCIDA_PRODUCTION_ENABLED !== 'true' ||
@@ -43,25 +45,48 @@ function productionSettings(env = process.env) {
 
 async function main(env = process.env) {
   const settings = productionSettings(env);
-  const config = loadConfig(env);
+  const config = loadProductionConfig(env);
   assertProductionConfig(config);
   const pool = createDatabasePool(config.databaseUrl, { statementTimeoutMillis: 10000 });
   try {
     await checkRagDatabase(pool);
     await checkProductionRepository(pool);
     const repository = createProductionRepository(pool);
+    let inviteEnrollment;
+    let inviteCleanup;
+    let inviteRepository;
+    if (env.APCIDA_INVITE_ENROLLMENT_ENABLED === 'true') {
+      const invites = createInviteRepository(pool);
+      inviteRepository = invites;
+      const cf = createCloudflareTokenClient({ accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        apiToken: env.CLOUDFLARE_PROVISIONING_API_TOKEN });
+      const schema = await pool.query("SELECT to_regclass('public.production_enrollment_invites') AS invites");
+      if (!schema.rows[0]?.invites) throw new Error('Invite schema unavailable');
+      inviteEnrollment = { redeem: (code) => redeemInvite(invites, cf, code) };
+      inviteCleanup = () => cleanupCloudflareTokens(invites, cf);
+    }
     const purge = async () => {
       await repository.purge(settings.retentionSeconds);
-      if (settings.identityRetentionDays !== null) {
+      let cleanupSafe = true;
+      if (inviteEnrollment) {
+        await inviteRepository.purge();
+        cleanupSafe = await inviteCleanup().then(() => true).catch(() => {
+          process.stderr.write('Cloudflare token cleanup deferred\n');
+          return false;
+        });
+      }
+      if (settings.identityRetentionDays !== null && cleanupSafe &&
+        (!inviteRepository || (await inviteRepository.pendingCloudflareTokens()).length === 0)) {
         await repository.purgeInactiveInstallations(settings.identityRetentionDays);
       }
     };
     await purge();
-    const audit = ({ event, installationId }) => {
-      process.stdout.write(`${new Date().toISOString()} ${event}${installationId ? ` installation=${installationId}` : ''}\n`);
+    const audit = ({ event, installationId, statusCode, elapsedMs }) => {
+      process.stdout.write(`${new Date().toISOString()} ${event}${installationId ? ` installation=${installationId}` : ''}${Number.isInteger(statusCode) ? ` status=${statusCode}` : ''}${Number.isInteger(elapsedMs) ? ` elapsed_ms=${elapsedMs}` : ''}\n`);
     };
     const app = createProductionApp(config, { repository, codec: settings.codec,
-      knowledgeRepository: createKnowledgeRepository(pool), audit,
+      knowledgeRepository: createKnowledgeRepository(pool), inviteEnrollment,
+      scheduleInviteCleanup: inviteCleanup, audit,
       retentionSeconds: settings.retentionSeconds, rateLimit: settings.rateLimit,
       deadlineMs: settings.deadlineMs });
     const server = app.listen(settings.port, '127.0.0.1', () => {

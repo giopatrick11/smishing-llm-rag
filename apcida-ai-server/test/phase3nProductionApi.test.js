@@ -1,7 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
+const { mkdtempSync, writeFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { createProductionApp } = require('../src/production/createProductionApp');
+const { loadConfig, loadProductionConfig } = require('../src/config/env');
 const { createApp } = require('../src/app');
 const { createPilotApp } = require('../src/pilot/createPilotApp');
 const { productionSettings } = require('../src/production/server');
@@ -151,6 +156,31 @@ test('controlled listener is disabled by default and pinned to loopback', () => 
   /Identity retention/);
 });
 
+test('protected listener configuration has no development API key dependency', () => {
+  const environment = { RAG_ENABLED: 'true', RULES_ENABLED: 'true',
+    DATABASE_URL: 'postgresql://127.0.0.1:5432/apcida' };
+  assert.throws(() => loadConfig(environment), /API_KEY/);
+  const production = loadProductionConfig(environment);
+  assert.equal(production.apiKey, undefined);
+  assert.equal(production.ragEnabled, true);
+});
+
+test('protected listener does not inherit secrets from a development .env file', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'apcida-config-test-'));
+  try {
+    writeFileSync(join(directory, '.env'), 'API_KEY=development-only-test-value\n');
+    const child = spawnSync(process.execPath,
+      ['-e', 'require(process.argv[1]); process.stdout.write(process.env.API_KEY || "")',
+        require.resolve('../src/config/env')],
+      { cwd: directory, env: { PATH: process.env.PATH,
+        APCIDA_PRODUCTION_MODE: 'controlled-test' }, encoding: 'utf8' });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, '');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('existing development and synthetic pilot listeners do not expose production route', async () => {
   const development = createApp({ ...config, ragEnabled: false, apiKey: 'a'.repeat(32) });
   await withServer(development, async (origin) => {
@@ -204,6 +234,9 @@ test('production route accepts only its own credential and returns a strict resp
       { 'x-apcida-pilot-synthetic': 'true' })).status, 400);
     assert.equal(JSON.stringify(f.audit).includes(sms.text), false);
     assert.equal(JSON.stringify(f.audit).includes(f.token), false);
+    const completed = f.audit.find((event) => event.event === 'PRODUCTION_ANALYSIS_FINISHED');
+    assert.equal(completed.statusCode, 200);
+    assert.ok(Number.isInteger(completed.elapsedMs) && completed.elapsedMs >= 0);
   });
 });
 
@@ -511,6 +544,7 @@ test('production deadline aborts inference and rejects a late SAFE result', asyn
     assert.equal(expired.status, 504);
     assert.equal(expired.body.error, 'ANALYSIS_DEADLINE');
     assert.equal(expired.body.classification, undefined);
+    assert.equal(f.audit.find((event) => event.event === 'PRODUCTION_ANALYSIS_FINISHED')?.statusCode, 504);
     assert.equal(observedSignal.aborted, true);
     assert.equal((await post(origin, f.token, { ...sms, messageId: randomUUID() })).status, 429);
     finish({ classification: 'SAFE', confidence: 'HIGH', rationale: 'Late synthetic safe' });
@@ -575,6 +609,7 @@ test('client disconnect cancels an in-flight synthetic analyzer', async () => {
   const startedPromise = new Promise((resolve) => { started = resolve; });
   const abortedPromise = new Promise((resolve) => { aborted = resolve; });
   const app = createProductionApp(config, { repository: f.db, codec: f.codec,
+    audit: (event) => f.audit.push(event),
     analysisService: { analyze(_sms, { signal }) {
       started();
       return new Promise((resolve, reject) => {
@@ -594,5 +629,7 @@ test('client disconnect cancels an in-flight synthetic analyzer', async () => {
     await abortedPromise;
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(f.db.requests.size, 0);
+    assert.equal(f.audit.filter((event) => event.event === 'PRODUCTION_ANALYSIS_DISCONNECTED').length, 1);
+    assert.equal(f.audit.some((event) => event.event === 'PRODUCTION_ANALYSIS_FINISHED'), false);
   });
 });
