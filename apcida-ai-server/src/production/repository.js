@@ -43,6 +43,22 @@ function createProductionRepository(pool) {
         FROM production_installations WHERE installation_id = $1`, [installationId]);
       return result.rows[0] || null;
     },
+    async renewalCandidate(installationId) {
+      const result = await pool.query(`SELECT cf_service_token_id AS "cfTokenId",
+        (EXTRACT(EPOCH FROM expires_at) * 1000)::double precision AS "expiresAt"
+        FROM production_installations WHERE installation_id = $1
+          AND revoked_at IS NULL AND expires_at > now()`, [installationId]);
+      return result.rows[0] || null;
+    },
+    async extendExpiry(installationId, cfTokenId, expiresAt) {
+      const result = await pool.query(`UPDATE production_installations
+        SET expires_at = GREATEST(expires_at, $3::timestamptz)
+        WHERE installation_id = $1 AND cf_service_token_id = $2
+          AND revoked_at IS NULL AND expires_at > now()
+        RETURNING (EXTRACT(EPOCH FROM expires_at) * 1000)::double precision AS "expiresAt"`,
+      [installationId, cfTokenId, new Date(expiresAt)]);
+      return result.rows[0]?.expiresAt || null;
+    },
     async countRequest(installationId, limit) {
       const result = await pool.query(`INSERT INTO production_rate_windows
         (installation_id, window_start, request_count)

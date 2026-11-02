@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createServer } = require('node:http');
 const { createProductionApp } = require('../src/production/createProductionApp');
 const { hashInvite, issueInvite, redeemInvite,
-  createCloudflareTokenClient, cleanupCloudflareTokens } = require('../src/production/inviteEnrollment');
+  createCloudflareTokenClient, renewInstallation, cleanupCloudflareTokens } = require('../src/production/inviteEnrollment');
 const { shouldApplyMigration } = require('../src/db/migrate');
 
 function fakeStore() {
@@ -84,6 +84,56 @@ test('Cloudflare API client uses a scoped create call without disclosing its API
   assert.ok(calls[0].url.startsWith('https://api.cloudflare.com/client/v4/accounts/'));
 });
 
+test('Cloudflare refresh extends the same service token without returning a new secret', async () => {
+  const calls = [];
+  const cf = createCloudflareTokenClient({ accountId: 'a'.repeat(32), apiToken: 't'.repeat(30),
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, status: 200, async json() { return { success: true,
+        result: { id: 'cf-3', enabled: true, expires_at: '2026-12-01T00:00:00Z' } }; } };
+    } });
+  assert.equal((await cf.refresh('cf-3')).expiresAt, Date.parse('2026-12-01T00:00:00Z'));
+  assert.ok(calls[0].url.endsWith('/cf-3/refresh'));
+  assert.equal(calls[0].options.method, 'POST');
+  assert.equal(calls[0].options.body, undefined);
+});
+
+test('phone renewal waits until the last week and never extends a revoked installation', async () => {
+  const now = Date.parse('2026-11-02T00:00:00Z');
+  let expiry = now + 6 * 86400000;
+  let active = true;
+  let refreshes = 0;
+  const repository = {
+    async renewalCandidate() { return active ? { cfTokenId: 'cf-3', expiresAt: expiry } : null; },
+    async extendExpiry(id, tokenId, next) {
+      assert.equal(id, 'phone-1');
+      assert.equal(tokenId, 'cf-3');
+      if (!active) return null;
+      expiry = next;
+      return expiry;
+    },
+  };
+  const cf = { async refresh() { refreshes++; return { expiresAt: now + 30 * 86400000 }; } };
+  assert.equal(await renewInstallation(repository, cf, 'phone-1', { now: () => now }),
+    now + 29 * 86400000);
+  assert.equal(refreshes, 1);
+  assert.equal(await renewInstallation(repository, cf, 'phone-1', { now: () => now }), expiry);
+  assert.equal(refreshes, 1);
+  active = false;
+  assert.equal(await renewInstallation(repository, cf, 'phone-1', { now: () => now }), null);
+  assert.equal(refreshes, 1);
+});
+
+test('phone renewal refuses a Cloudflare expiry that is too short', async () => {
+  const now = Date.parse('2026-11-02T00:00:00Z');
+  const repository = { async renewalCandidate() {
+    return { cfTokenId: 'cf-3', expiresAt: now + 2 * 86400000 };
+  }, async extendExpiry() { throw Error('must not write'); } };
+  await assert.rejects(renewInstallation(repository,
+    { async refresh() { return { expiresAt: now + 3 * 86400000 }; } },
+    'phone-1', { now: () => now }), /did not extend/);
+});
+
 test('revoked phone tokens stay queued until Cloudflare confirms deletion', async () => {
   let pending = [{ installationId: 'phone-1', cfTokenId: 'cf-1' }];
   const repository = {
@@ -129,5 +179,34 @@ test('enrollment endpoint is absent by default and validates one code when enabl
     assert.equal(redeemed, 0);
     assert.equal((await post(origin, { inviteCode: 'x'.repeat(43) })).status, 401);
     assert.equal(redeemed, 1);
+  });
+});
+
+test('renewal endpoint requires an active phone credential and accepts an empty request', async () => {
+  const token = 'a'.repeat(43);
+  const repository = Object.fromEntries(['findByTokenHash', 'isActive', 'revoke', 'countRequest',
+    'claim', 'complete', 'release', 'acquireSlot', 'releaseSlot'].map((name) => [name, async () => null]));
+  repository.findByTokenHash = async () => ({ installationId: 'phone-1',
+    expiresAt: Date.now() + 86400000, revokedAt: null });
+  const config = { model: 'gemma3:12b', ragEnabled: true, rulesEnabled: true,
+    rulesShadowMode: true, verdictPolicy: 'gemma' };
+  let renewals = 0;
+  const app = createProductionApp(config, {
+    repository, codec: { requestHmac() {}, encrypt() {}, decrypt() {} },
+    analysisService: { analyze() {} }, inviteEnrollment: {
+      async redeem() { return null; },
+      async renew(id) { assert.equal(id, 'phone-1'); renewals++; return Date.now() + 29 * 86400000; },
+    },
+  });
+  await withServer(app, async (origin) => {
+    const url = `${origin}/api/v1/installations/me/renew`;
+    assert.equal((await fetch(url, { method: 'POST' })).status, 401);
+    assert.equal((await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${token}` },
+      body: 'unexpected' })).status, 400);
+    const response = await fetch(url, { method: 'POST',
+      headers: { authorization: `Bearer ${token}` } });
+    assert.equal(response.status, 200);
+    assert.ok(Number.isFinite((await response.json()).expiresAt));
+    assert.equal(renewals, 1);
   });
 });

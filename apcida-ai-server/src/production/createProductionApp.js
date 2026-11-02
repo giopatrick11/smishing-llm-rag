@@ -90,6 +90,24 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
         return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
       }
     });
+  if (typeof inviteEnrollment?.renew === 'function') {
+    app.post('/api/v1/installations/me/renew', createRateLimiter({ limit: 5 }), auth,
+      async (req, res) => {
+        if (req.get('transfer-encoding') ||
+            (req.get('content-length') && req.get('content-length') !== '0')) {
+          return res.status(400).json({ error: 'INVALID_REQUEST' });
+        }
+        try {
+          const expiresAt = await inviteEnrollment.renew(res.locals.installationId);
+          if (!Number.isFinite(expiresAt)) return res.status(401).json({ error: 'UNAUTHORIZED' });
+          safeAudit({ event: 'PRODUCTION_INSTALLATION_RENEWED',
+            installationId: res.locals.installationId });
+          return res.json({ expiresAt });
+        } catch {
+          return res.status(503).json({ error: 'RENEWAL_UNAVAILABLE' });
+        }
+      });
+  }
   app.post('/api/v1/sms/analyze', createRateLimiter({ limit: 30 }), auth,
     express.json({ limit: '8kb', strict: true }), async (req, res) => {
       if (req.get('x-apcida-pilot-synthetic') !== undefined) {

@@ -117,7 +117,33 @@ function createCloudflareTokenClient({ accountId, apiToken, fetchImpl = fetch })
       if (!/^[A-Za-z0-9_-]{1,80}$/u.test(id)) throw new TypeError('Invalid Cloudflare token ID');
       await request(`/${id}`, { method: 'DELETE' });
     },
+    async refresh(id) {
+      if (!/^[A-Za-z0-9_-]{1,80}$/u.test(id)) throw new TypeError('Invalid Cloudflare token ID');
+      const body = await request(`/${id}/refresh`, { method: 'POST' });
+      const token = body?.result;
+      const expiresAt = Date.parse(token?.expires_at);
+      if (token?.id !== id || token?.enabled === false || !Number.isFinite(expiresAt)) {
+        throw new Error('Cloudflare service token refresh unavailable');
+      }
+      return { expiresAt };
+    },
   };
+}
+
+/** Extend the existing phone credentials before either of them expires. */
+async function renewInstallation(repository, cloudflare, installationId, { now = Date.now } = {}) {
+  const current = await repository.renewalCandidate(installationId);
+  if (!current || !current.cfTokenId || !Number.isFinite(current.expiresAt) ||
+      current.expiresAt <= now()) return null;
+  if (current.expiresAt - now() > 7 * DAY_MS) return current.expiresAt;
+  const refreshed = await cloudflare.refresh(current.cfTokenId);
+  // The backend expires a day before Cloudflare, as it does at enrollment.
+  const expiresAt = Math.min(now() + 29 * DAY_MS, refreshed.expiresAt - DAY_MS);
+  if (!Number.isFinite(expiresAt) || expiresAt <= current.expiresAt ||
+      expiresAt <= now() + 7 * DAY_MS) {
+    throw new Error('Cloudflare renewal did not extend the phone lifetime');
+  }
+  return repository.extendExpiry(installationId, current.cfTokenId, expiresAt);
 }
 
 async function redeemInvite(repository, cloudflare, code, { now = Date.now } = {}) {
@@ -158,4 +184,4 @@ async function cleanupCloudflareTokens(repository, cloudflare) {
 }
 
 module.exports = { hashInvite, createInviteRepository, issueInvite,
-  createCloudflareTokenClient, redeemInvite, cleanupCloudflareTokens };
+  createCloudflareTokenClient, redeemInvite, renewInstallation, cleanupCloudflareTokens };

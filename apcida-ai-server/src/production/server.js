@@ -5,7 +5,7 @@ const { createProductionRepository, checkProductionRepository } = require('./rep
 const { createPrivacyCodec } = require('./privacy');
 const { assertProductionConfig, createProductionApp } = require('./createProductionApp');
 const { createInviteRepository, createCloudflareTokenClient,
-  redeemInvite, cleanupCloudflareTokens } = require('./inviteEnrollment');
+  redeemInvite, renewInstallation, cleanupCloudflareTokens } = require('./inviteEnrollment');
 
 function productionSettings(env = process.env) {
   if (env.APCIDA_PRODUCTION_ENABLED !== 'true' ||
@@ -62,7 +62,8 @@ async function main(env = process.env) {
         apiToken: env.CLOUDFLARE_PROVISIONING_API_TOKEN });
       const schema = await pool.query("SELECT to_regclass('public.production_enrollment_invites') AS invites");
       if (!schema.rows[0]?.invites) throw new Error('Invite schema unavailable');
-      inviteEnrollment = { redeem: (code) => redeemInvite(invites, cf, code) };
+      inviteEnrollment = { redeem: (code) => redeemInvite(invites, cf, code),
+        renew: (installationId) => renewInstallation(repository, cf, installationId) };
       inviteCleanup = () => cleanupCloudflareTokens(invites, cf);
     }
     const purge = async () => {
