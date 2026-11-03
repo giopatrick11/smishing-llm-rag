@@ -1,3 +1,11 @@
+const { timingSafeEqual } = require('node:crypto');
+
+function matchingHmac(a, b) {
+  return typeof a === 'string' && typeof b === 'string' &&
+    /^[0-9a-f]{64}$/u.test(a) && /^[0-9a-f]{64}$/u.test(b) &&
+    timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+}
+
 function createProductionRepository(pool) {
   if (!pool?.query) throw new TypeError('Production database pool is required');
   return {
@@ -27,6 +35,10 @@ function createProductionRepository(pool) {
         const result = await client.query(`UPDATE production_installations SET revoked_at = now()
           WHERE installation_id = $1 AND revoked_at IS NULL RETURNING installation_id`, [installationId]);
         if (result.rowCount === 1) {
+          const reportSchema = await client.query("SELECT to_regclass('public.production_reports') AS table_name");
+          if (reportSchema.rows[0]?.table_name) {
+            await client.query(`DELETE FROM production_reports WHERE installation_id = $1`, [installationId]);
+          }
           await client.query(`DELETE FROM production_inference_requests WHERE installation_id = $1`, [installationId]);
           await client.query(`DELETE FROM production_rate_windows WHERE installation_id = $1`, [installationId]);
         }
@@ -67,6 +79,34 @@ function createProductionRepository(pool) {
         DO UPDATE SET request_count = production_rate_windows.request_count + 1
         RETURNING request_count`, [installationId]);
       return result.rows[0].request_count <= limit;
+    },
+    async submitReport({ installationId, clientReportId, contentHmac, encrypted }) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // Serialize submissions and revocation for this installation.
+        const active = await client.query(`SELECT installation_id FROM production_installations
+          WHERE installation_id = $1 AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`,
+        [installationId]);
+        if (!active.rowCount) { await client.query('ROLLBACK'); return 'UNAUTHORIZED'; }
+        const existing = await client.query(`SELECT content_hmac AS "contentHmac" FROM production_reports
+          WHERE installation_id = $1 AND client_report_id = $2`, [installationId, clientReportId]);
+        if (existing.rowCount) {
+          await client.query('COMMIT');
+          return matchingHmac(existing.rows[0].contentHmac, contentHmac) ? 'REPLAY' : 'CONFLICT';
+        }
+        const daily = await client.query(`SELECT count(*)::integer AS total FROM production_reports
+          WHERE installation_id = $1 AND created_at >= now() - interval '24 hours'`, [installationId]);
+        if (daily.rows[0].total >= 20) { await client.query('COMMIT'); return 'RATE_LIMITED'; }
+        await client.query(`INSERT INTO production_reports
+          (installation_id, client_report_id, content_hmac, content_encrypted)
+          VALUES ($1, $2, $3, $4)`, [installationId, clientReportId, contentHmac, encrypted]);
+        await client.query('COMMIT');
+        return 'CREATED';
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally { client.release(); }
     },
     async acquireSlot(leaseOwner, leaseSeconds) {
       const result = await pool.query(`UPDATE production_inference_slot
@@ -122,10 +162,14 @@ function createProductionRepository(pool) {
           AND status = 'PROCESSING'`, [installationId, messageId, leaseOwner]);
     },
     async purge(retentionSeconds) {
+      const reportSchema = await pool.query("SELECT to_regclass('public.production_reports') AS table_name");
+      const reports = reportSchema.rows[0]?.table_name
+        ? await pool.query(`DELETE FROM production_reports WHERE expires_at <= now()`)
+        : { rowCount: 0 };
       const requests = await pool.query(`DELETE FROM production_inference_requests WHERE expires_at <= now()`);
       const rates = await pool.query(`DELETE FROM production_rate_windows
         WHERE window_start < now() - $1::integer * interval '1 second'`, [retentionSeconds]);
-      return { requests: requests.rowCount, rates: rates.rowCount };
+      return { reports: reports.rowCount, requests: requests.rowCount, rates: rates.rowCount };
     },
     async purgeInactiveInstallations(retentionDays) {
       if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650) {

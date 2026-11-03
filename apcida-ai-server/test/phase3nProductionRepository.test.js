@@ -18,6 +18,8 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
     try {
       await pool.query(fs.readFileSync(path.join(__dirname,
         '../src/db/migrations/004_production_inference.sql'), 'utf8'));
+      await pool.query(fs.readFileSync(path.join(__dirname,
+        '../src/db/migrations/007_production_reports.sql'), 'utf8'));
       await checkProductionRepository(pool);
       const repo = createProductionRepository(pool);
       const { tokenHash } = issueInstallationCredential();
@@ -42,6 +44,32 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
       await repo.releaseSlot(recoveredSlotOwner);
 
       const codec = createPrivacyCodec('1a'.repeat(32));
+      const report = { clientReportId: randomUUID(), reportType: 'Scam was not detected',
+        remarks: 'Synthetic review', smsText: 'Synthetic private message',
+        messageSharingConsent: true, observedVerdict: 'SAFE', riskScore: 0 };
+      const submission = { installationId, clientReportId: report.clientReportId,
+        contentHmac: codec.reportHmac(report), encrypted: codec.encryptReport(report) };
+      assert.equal(await repo.submitReport(submission), 'CREATED');
+      assert.equal(await repo.submitReport(submission), 'REPLAY');
+      assert.equal(await repo.submitReport({ ...submission,
+        contentHmac: codec.reportHmac({ ...report, remarks: 'Changed' }) }), 'CONFLICT');
+      const savedReport = await pool.query(`SELECT content_encrypted FROM production_reports
+        WHERE installation_id = $1 AND client_report_id = $2`, [installationId, report.clientReportId]);
+      assert.equal(savedReport.rows[0].content_encrypted.includes(Buffer.from(report.smsText)), false);
+      assert.deepEqual(codec.decryptReport(savedReport.rows[0].content_encrypted), report);
+      for (let index = 0; index < 19; index += 1) {
+        const next = { ...report, clientReportId: randomUUID(), smsText: null,
+          messageSharingConsent: false };
+        assert.equal(await repo.submitReport({ installationId,
+          clientReportId: next.clientReportId, contentHmac: codec.reportHmac(next),
+          encrypted: codec.encryptReport(next) }), 'CREATED');
+      }
+      assert.equal(await repo.submitReport({ installationId, clientReportId: randomUUID(),
+        contentHmac: codec.reportHmac(report), encrypted: codec.encryptReport(report) }), 'RATE_LIMITED');
+      assert.equal(await repo.submitReport(submission), 'REPLAY');
+      await pool.query(`UPDATE production_reports SET expires_at = now() - interval '1 second'
+        WHERE installation_id = $1 AND client_report_id = $2`, [installationId, report.clientReportId]);
+      assert.equal((await repo.purge(3600)).reports, 1);
       const sms = { messageId, sender: 'ManualTest', text: 'Synthetic database SMS',
         receivedAt: '2026-10-28T00:00:00Z' };
       const requestHmac = codec.requestHmac(sms);
@@ -90,6 +118,8 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
       assert.equal((await afterRestart.claim({ ...first,
         messageId: randomUUID(), leaseOwner: randomUUID() })).kind, 'CLAIMED');
       assert.equal(await afterRestart.revoke(installationId), true);
+      assert.equal((await reopened.query(`SELECT count(*)::integer AS total FROM production_reports
+        WHERE installation_id = $1`, [installationId])).rows[0].total, 0);
       assert.ok((await afterRestart.findByTokenHash(tokenHash)).revokedAt);
       const remaining = await reopened.query(`SELECT count(*)::integer AS count
         FROM production_inference_requests WHERE installation_id = $1`, [installationId]);

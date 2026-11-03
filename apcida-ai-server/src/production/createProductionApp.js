@@ -7,6 +7,7 @@ const { createRateLimiter } = require('../middleware/rateLimit');
 const { createInstallationAuth } = require('./security');
 const { validateProductionRequest, validateProductionResponse } = require('./smsContract');
 const { startAnalysisDeadline } = require('./deadline');
+const { validateReport } = require('./reportContract');
 
 function assertProductionConfig(config) {
   if (config.model !== 'gemma3:12b' || !config.ragEnabled || !config.rulesEnabled
@@ -26,11 +27,12 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
   retentionSeconds = 86400, deadlineMs = 90000 } = {}) {
   assertProductionConfig(config);
   if (!repository || !['findByTokenHash', 'isActive', 'revoke', 'countRequest', 'claim', 'complete', 'release',
-    'acquireSlot', 'releaseSlot']
+    'acquireSlot', 'releaseSlot', 'submitReport']
     .every((method) => typeof repository[method] === 'function')) {
     throw new TypeError('Production repository required');
   }
-  if (!codec?.requestHmac || !codec?.encrypt || !codec?.decrypt) {
+  if (!codec?.requestHmac || !codec?.reportHmac || !codec?.encrypt || !codec?.decrypt ||
+      !codec?.encryptReport) {
     throw new TypeError('Production privacy codec required');
   }
   if (!Number.isInteger(rateLimit) || rateLimit < 1 ||
@@ -108,6 +110,32 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
         }
       });
   }
+  app.post('/api/v1/reports', createRateLimiter({ limit: 10 }), auth,
+    express.json({ limit: '8kb', strict: true }), async (req, res) => {
+      if (!req.is('application/json')) return res.status(400).json({ error: 'INVALID_REQUEST' });
+      const report = validateReport(req.body);
+      if (!report) return res.status(400).json({ error: 'INVALID_REQUEST' });
+      const installationId = res.locals.installationId;
+      try {
+        const result = await repository.submitReport({ installationId,
+          clientReportId: report.clientReportId, contentHmac: codec.reportHmac(report),
+          encrypted: codec.encryptReport(report) });
+        if (result === 'CREATED' || result === 'REPLAY') {
+          safeAudit({ event: 'PRODUCTION_REPORT_ACCEPTED', installationId,
+            statusCode: result === 'CREATED' ? 201 : 200 });
+          return res.status(result === 'CREATED' ? 201 : 200)
+            .json({ reportId: report.clientReportId, status: 'RECEIVED_FOR_REVIEW' });
+        }
+        if (result === 'CONFLICT') return res.status(409).json({ error: 'REPORT_ID_CONFLICT' });
+        if (result === 'RATE_LIMITED') {
+          res.set('Retry-After', '3600');
+          return res.status(429).json({ error: 'RATE_LIMITED' });
+        }
+        return res.status(401).json({ error: 'UNAUTHORIZED' });
+      } catch {
+        return res.status(503).json({ error: 'DATABASE_UNAVAILABLE' });
+      }
+    });
   app.post('/api/v1/sms/analyze', createRateLimiter({ limit: 30 }), auth,
     express.json({ limit: '8kb', strict: true }), async (req, res) => {
       if (req.get('x-apcida-pilot-synthetic') !== undefined) {

@@ -30,10 +30,11 @@ function fakeDatabase() {
   const installations = new Map();
   const requests = new Map();
   const windows = new Map();
+  const reports = new Map();
   let unavailable = false;
   let slotOwner = null;
   const db = {
-    installations, requests, windows,
+    installations, requests, windows, reports,
     setUnavailable(value) { unavailable = value; },
     async createInstallation(row) { if (unavailable) throw Error('db down'); installations.set(row.tokenHash, { ...row, revokedAt: null }); },
     async findByTokenHash(hash) {
@@ -53,6 +54,7 @@ function fakeDatabase() {
       if (!row || row.revokedAt) return false;
       row.revokedAt = new Date();
       for (const key of requests.keys()) if (key.startsWith(`${id}/`)) requests.delete(key);
+      for (const key of reports.keys()) if (key.startsWith(`${id}/`)) reports.delete(key);
       windows.delete(id);
       return true;
     },
@@ -60,6 +62,16 @@ function fakeDatabase() {
       if (unavailable) throw Error('db down');
       const count = (windows.get(id) || 0) + 1;
       windows.set(id, count); return count <= limit;
+    },
+    async submitReport({ installationId, clientReportId, contentHmac, encrypted }) {
+      if (unavailable) throw Error('db down');
+      if (!(await this.isActive(installationId))) return 'UNAUTHORIZED';
+      const key = `${installationId}/${clientReportId}`;
+      const old = reports.get(key);
+      if (old) return old.contentHmac === contentHmac ? 'REPLAY' : 'CONFLICT';
+      if ([...reports.keys()].filter((item) => item.startsWith(`${installationId}/`)).length >= 20) return 'RATE_LIMITED';
+      reports.set(key, { contentHmac, encrypted });
+      return 'CREATED';
     },
     async acquireSlot(owner) {
       if (unavailable) throw Error('db down');
@@ -126,6 +138,37 @@ async function post(origin, token, body = sms, headers = {}) {
       ...headers }, body: JSON.stringify(body) });
   return { status: response.status, body: await response.json(), headers: response.headers };
 }
+
+test('reports require installation authentication, consent, and review without changing RAG', async () => {
+  const f = fixture();
+  const report = { clientReportId: randomUUID(), reportType: 'Scam was not detected',
+    remarks: 'Invented beta feedback', smsText: null,
+    messageSharingConsent: false, observedVerdict: 'SAFE', riskScore: 0 };
+  await withServer(f.app, async (origin) => {
+    const send = async (body, token = f.token) => {
+      const response = await fetch(`${origin}/api/v1/reports`, { method: 'POST',
+        headers: { 'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(body) });
+      return { status: response.status, body: await response.json() };
+    };
+    assert.equal((await send(report, null)).status, 401);
+    assert.equal((await send({ ...report, smsText: 'private' })).status, 400);
+    assert.equal((await send({ ...report, sender: 'sensitive' })).status, 400);
+    const first = await send(report);
+    assert.equal(first.status, 201);
+    assert.deepEqual(first.body, { reportId: report.clientReportId, status: 'RECEIVED_FOR_REVIEW' });
+    assert.equal((await send(report)).status, 200);
+    assert.equal((await send({ ...report, remarks: 'changed' })).status, 409);
+    const stored = f.db.reports.get(`${f.installationId}/${report.clientReportId}`);
+    assert.ok(stored);
+    assert.deepEqual(f.codec.decryptReport(stored.encrypted), report);
+    assert.equal(f.db.requests.size, 0);
+    f.db.setUnavailable(true);
+    assert.equal((await send({ ...report, clientReportId: randomUUID() })).status, 503);
+    f.db.setUnavailable(false);
+  });
+});
 
 test('controlled listener is disabled by default and pinned to loopback', () => {
   assert.equal(shouldApplyMigration('004_production_inference.sql'), false);
