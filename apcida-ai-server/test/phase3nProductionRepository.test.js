@@ -46,7 +46,7 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
       const codec = createPrivacyCodec('1a'.repeat(32));
       const report = { clientReportId: randomUUID(), reportType: 'Scam was not detected',
         remarks: 'Synthetic review', smsText: 'Synthetic private message',
-        messageSharingConsent: true, observedVerdict: 'SAFE', riskScore: 0 };
+        consentScope: 'REVIEW_AND_RAG_CANDIDATE', observedVerdict: 'SAFE', riskScore: 0 };
       const submission = { installationId, clientReportId: report.clientReportId,
         contentHmac: codec.reportHmac(report), encrypted: codec.encryptReport(report) };
       assert.equal(await repo.submitReport(submission), 'CREATED');
@@ -58,8 +58,7 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
       assert.equal(savedReport.rows[0].content_encrypted.includes(Buffer.from(report.smsText)), false);
       assert.deepEqual(codec.decryptReport(savedReport.rows[0].content_encrypted), report);
       for (let index = 0; index < 19; index += 1) {
-        const next = { ...report, clientReportId: randomUUID(), smsText: null,
-          messageSharingConsent: false };
+        const next = { ...report, clientReportId: randomUUID(), smsText: `Synthetic message ${index}` };
         assert.equal(await repo.submitReport({ installationId,
           clientReportId: next.clientReportId, contentHmac: codec.reportHmac(next),
           encrypted: codec.encryptReport(next) }), 'CREATED');

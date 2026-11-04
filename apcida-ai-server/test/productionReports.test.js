@@ -7,14 +7,16 @@ const { parseArgs } = require('../src/production/reportReviewCli');
 const { shouldApplyMigration } = require('../src/db/migrate');
 
 const base = { clientReportId: randomUUID(), reportType: 'Scam was not detected',
-  remarks: 'The warning did not appear', smsText: null,
-  messageSharingConsent: false, observedVerdict: 'SAFE', riskScore: 0 };
+  remarks: 'The warning did not appear', smsText: 'private SMS',
+  consentScope: 'REVIEW_AND_RAG_CANDIDATE', observedVerdict: 'SAFE', riskScore: 0 };
 
-test('report contract requires explicit message sharing and rejects unknown fields', () => {
+test('report contract requires message text and combined consent scope', () => {
   assert.deepEqual(validateReport(base), base);
-  assert.equal(validateReport({ ...base, smsText: 'private SMS' }), null);
-  assert.equal(validateReport({ ...base, smsText: 'private SMS', messageSharingConsent: true })?.smsText,
-    'private SMS');
+  assert.equal(validateReport({ ...base, smsText: null }), null);
+  assert.equal(validateReport({ ...base, smsText: '   ' }), null);
+  assert.equal(validateReport({ ...base, consentScope: undefined }), null);
+  assert.equal(validateReport({ ...base, consentScope: 'REVIEW_ONLY' }), null);
+  assert.equal(validateReport({ ...base, messageSharingConsent: true }), null);
   assert.equal(validateReport({ ...base, sender: 'phone number' }), null);
   assert.equal(validateReport({ ...base, gemmaRationale: 'echoed SMS' }), null);
   assert.equal(validateReport({ ...base, remarks: 'x'.repeat(501) }), null);
@@ -23,7 +25,7 @@ test('report contract requires explicit message sharing and rejects unknown fiel
 
 test('report privacy codec encrypts content and gives a separate keyed digest', () => {
   const codec = createPrivacyCodec('1a'.repeat(32));
-  const report = validateReport({ ...base, smsText: 'private SMS', messageSharingConsent: true });
+  const report = validateReport(base);
   const encrypted = codec.encryptReport(report);
   assert.equal(encrypted.includes(Buffer.from('private SMS')), false);
   assert.deepEqual(codec.decryptReport(encrypted), report);

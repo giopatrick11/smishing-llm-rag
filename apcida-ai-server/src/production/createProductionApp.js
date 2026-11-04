@@ -111,7 +111,7 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
       });
   }
   app.post('/api/v1/reports', createRateLimiter({ limit: 10 }), auth,
-    express.json({ limit: '8kb', strict: true }), async (req, res) => {
+    express.json({ limit: '32kb', strict: true }), async (req, res) => {
       if (!req.is('application/json')) return res.status(400).json({ error: 'INVALID_REQUEST' });
       const report = validateReport(req.body);
       if (!report) return res.status(400).json({ error: 'INVALID_REQUEST' });

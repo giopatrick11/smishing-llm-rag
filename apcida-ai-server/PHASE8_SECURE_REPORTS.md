@@ -3,8 +3,10 @@
 The Report button saves a snapshot on the phone. The updated beta queues a small
 report for `POST /api/v1/reports` using that phone's invite-issued installation
 credential and Cloudflare Access service token. It sends the report type, optional
-remarks, observed verdict, and rule score. SMS text is sent only when the person
-checks **Include this SMS text**. Sender, contacts, model rationale, matched
+remarks, observed verdict, rule score, and SMS text. The person first reviews the
+exact SMS text and checks one required consent covering admin review and possible
+use of a redacted, human-approved version as a RAG example. Without that consent
+or valid SMS text, the report cannot be submitted. Sender, contacts, model rationale, matched
 indicators, and the rest of the phone database are not uploaded by this route.
 
 The server accepts only known fields and valid report types. It limits each
@@ -15,8 +17,11 @@ stores a keyed digest for duplicate detection. The API returns only the report
 ID and `RECEIVED_FOR_REVIEW`. It does not classify the report or add it to RAG.
 Server copies expire after 30 days and are removed by the hourly cleanup. Revoking
 the installation removes its reports immediately. The phone's local copy remains
-until the person deletes it in the app. Reports saved by an older build remain
-local after upgrade; a fresh enrollment also sets a new upload boundary.
+until the person deletes it in the app. If a reviewed, redacted example is later
+approved into RAG, that example can persist beyond the report's 30-day lifetime.
+Reports saved by an older build lack this combined consent and remain local after
+upgrade; a fresh enrollment also sets a new upload boundary. Older beta builds
+cannot upload new reports to this stricter endpoint and must be updated.
 
 ## Prepare the controlled Mac server
 
@@ -47,14 +52,16 @@ command creates a private mode-0600 file and refuses to overwrite
 an existing one. Delete that file when review is finished. Use `dismiss` in place
 of `review` for an unusable report. No review command inserts into RAG.
 
-Before adding any report as a RAG example, a reviewer must verify the label,
-remove personal details and malicious instructions, and separately use the
-existing curated knowledge workflow. Reports and RAG records are separate tables.
+Before adding any report as a RAG example, a reviewer must confirm its
+`consentScope` is `REVIEW_AND_RAG_CANDIDATE`, verify the label, remove personal
+details and malicious instructions, and separately use the existing curated
+knowledge workflow. Legacy reports already on the server have no such scope
+and must not be promoted. Reports and RAG records are separate tables.
 
 ## Phone check
 
 Install the updated beta APK, keep the existing invite-issued service access,
-and submit one invented issue from Message Details. Check Reports for **Received
-for review**. Leave the SMS-text checkbox clear to confirm the default. If the
+and submit one invented issue from Message Details. Check that Submit is disabled
+until the single consent is checked, then check Reports for **Received for review**. If the
 Mac or network is unavailable, the report stays **Pending** and retries when the
 phone has internet. This test needs an enrolled phone and the updated server.

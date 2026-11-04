@@ -142,8 +142,8 @@ async function post(origin, token, body = sms, headers = {}) {
 test('reports require installation authentication, consent, and review without changing RAG', async () => {
   const f = fixture();
   const report = { clientReportId: randomUUID(), reportType: 'Scam was not detected',
-    remarks: 'Invented beta feedback', smsText: null,
-    messageSharingConsent: false, observedVerdict: 'SAFE', riskScore: 0 };
+    remarks: 'Invented beta feedback', smsText: 'Invented beta SMS',
+    consentScope: 'REVIEW_AND_RAG_CANDIDATE', observedVerdict: 'SAFE', riskScore: 0 };
   await withServer(f.app, async (origin) => {
     const send = async (body, token = f.token) => {
       const response = await fetch(`${origin}/api/v1/reports`, { method: 'POST',
@@ -153,7 +153,8 @@ test('reports require installation authentication, consent, and review without c
       return { status: response.status, body: await response.json() };
     };
     assert.equal((await send(report, null)).status, 401);
-    assert.equal((await send({ ...report, smsText: 'private' })).status, 400);
+    assert.equal((await send({ ...report, smsText: null })).status, 400);
+    assert.equal((await send({ ...report, consentScope: undefined })).status, 400);
     assert.equal((await send({ ...report, sender: 'sensitive' })).status, 400);
     const first = await send(report);
     assert.equal(first.status, 201);
