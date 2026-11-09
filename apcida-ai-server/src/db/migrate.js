@@ -6,7 +6,8 @@ const { loadDatabaseUrl } = require('../config/env');
 
 function shouldApplyMigration(file, { includeProduction = false } = {}) {
   return !['004_production_inference.sql', '005_production_invites.sql',
-    '006_production_invite_cleanup.sql', '007_production_reports.sql'].includes(file)
+    '006_production_invite_cleanup.sql', '007_production_reports.sql',
+    '008_invite_cancellation.sql'].includes(file)
     || includeProduction;
 }
 

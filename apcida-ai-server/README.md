@@ -244,6 +244,10 @@ Each row needs a unique `external_id` (up to 128 characters), the independently 
 
 The workflow is **CSV → full-file validation and duplicate checks → staging → sequential local embeddings → manual review → manual approval → active knowledge**. An invalid or contaminated row rejects the whole import before staging. Exact duplicates use normalized-text SHA-256; near duplicates use character trigram Dice similarity at 0.88 or higher. Normalization removes casing and punctuation differences and replaces URLs and long numbers with placeholders. This is a conservative text heuristic, not a guarantee against every paraphrase.
 
+For the controlled Mac database, see [PHASE9_RAG_REVIEW.md](PHASE9_RAG_REVIEW.md). It explains how reports remain separate from RAG and provides a read-only `validate` command to check a private candidate CSV before import.
+
+The Mac-hosted [administrator dashboard](PHASE10_ADMIN_DASHBOARD.md) provides a browser workflow for reviewing consented reports, staging redacted examples, approving them for RAG, and deactivating active examples.
+
 For the existing 200-message evaluation corpus, run the import with a contamination check:
 
 ```sh

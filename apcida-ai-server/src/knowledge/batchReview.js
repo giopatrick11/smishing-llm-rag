@@ -81,6 +81,15 @@ async function getReviewPage(pool, { page = 1, pageSize = 10, corpus }) {
   };
 }
 
+async function getReviewEntry(pool, id, corpus) {
+  if (!/^\d+$/u.test(String(id)) || !corpus) throw new Error('Candidate ID and evaluation corpus are required');
+  const result = await pool.query(`SELECT ${REVIEW_COLUMNS} FROM rag_knowledge_staging WHERE id = $1`, [id]);
+  if (result.rows.length !== 1) throw new Error('Candidate not found');
+  const references = await loadReferences(pool);
+  const entry = result.rows[0];
+  return { ...entry, duplicateCheckStatus: checkStagedEntry(entry, references, corpus) };
+}
+
 async function approveBatch(pool, ids, approver, corpus) {
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 20
     || ids.some((id) => !/^\d+$/.test(String(id))) || new Set(ids.map(String)).size !== ids.length) {
@@ -134,6 +143,6 @@ function parseSelectedIds(answer, pageEntries) {
 }
 
 module.exports = {
-  getReviewPage, approveBatch, checkStagedEntry, parseSelectedIds, validatePage,
+  getReviewPage, getReviewEntry, approveBatch, checkStagedEntry, parseSelectedIds, validatePage,
   loadReferences, REVIEW_COLUMNS, insertApprovedRows,
 };

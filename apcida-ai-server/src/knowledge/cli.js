@@ -9,13 +9,14 @@ const { parseKnowledgeCsv, loadEvaluationCorpus } = require('./csv');
 const { getReviewPage, approveBatch, parseSelectedIds, validatePage } = require('./batchReview');
 const { getApproveAllPreview, parseIds, createApprovalPlan, applyApproveAll } = require('./approveAll');
 const {
-  stageImport, embedPending, listPending, showEntry, approveEntry,
-  rejectEntry, countActive,
+  validateImport, stageImport, embedPending, listPending, showEntry, approveEntry,
+  rejectEntry, countActive, listActive, showActive, auditActive,
 } = require('./adminRepository');
 
 const HELP = `Usage: npm run knowledge -- COMMAND [options]
 
 Commands (all require RAG_ADMIN_KEY and APCIDA_ADMIN_TOKEN):
+  validate --file FILE --evaluation-csv FILE --evaluation-text-column NAME
   import --file FILE [--evaluation-csv FILE --evaluation-text-column NAME]
   embed-pending
   pending
@@ -25,8 +26,12 @@ Commands (all require RAG_ADMIN_KEY and APCIDA_ADMIN_TOKEN):
   approve --id ID --approver NAME --confirm-reviewed
   reject --id ID --approver NAME --reason TEXT
   count
+  active [--page N --page-size N]
+  show-active --id ID
+  audit --evaluation-csv FILE --evaluation-text-column NAME
 
-Import validates every row and checks duplicates before staging any row.
+Validate checks every row against the evaluation corpus and current knowledge without writing.
+Import repeats its checks before staging any row.
 Embedding runs sequentially. Batch review requires an interactive terminal and an exact typed confirmation before approval.`;
 
 function parseOptions(args, allowed, booleanFlags = []) {
@@ -126,6 +131,17 @@ async function approveAllSession(preview, { ask, print, apply, approver }) {
 
 async function execute(command, args, pool) {
   switch (command) {
+    case 'validate': {
+      const options = parseOptions(args, ['--file', '--evaluation-csv', '--evaluation-text-column']);
+      if (!options['--file'] || !options['--evaluation-csv'] || !options['--evaluation-text-column']) {
+        throw new Error('validate requires --file, --evaluation-csv, and --evaluation-text-column');
+      }
+      const rows = parseKnowledgeCsv(fs.readFileSync(path.resolve(options['--file']), 'utf8'));
+      const evaluation = loadEvaluationCorpus(path.resolve(options['--evaluation-csv']), options['--evaluation-text-column']);
+      const checked = await validateImport(pool, rows, evaluation);
+      process.stdout.write(`Validated ${checked} candidate entries against current knowledge and evaluation corpus; nothing staged or embedded.\n`);
+      break;
+    }
     case 'import': {
       const options = parseOptions(args, ['--file', '--evaluation-csv', '--evaluation-text-column']);
       if (!options['--file']) throw new Error('--file is required');
@@ -239,6 +255,28 @@ async function execute(command, args, pool) {
     case 'count': {
       if (args.length) throw new Error('count takes no options');
       process.stdout.write(`Active approved knowledge records: ${await countActive(pool)}\n`);
+      break;
+    }
+    case 'active': {
+      const options = parseOptions(args, ['--page', '--page-size']);
+      const page = options['--page'] == null ? 1 : Number(options['--page']);
+      const pageSize = options['--page-size'] == null ? 10 : Number(options['--page-size']);
+      validatePage(page, pageSize);
+      process.stdout.write(`${JSON.stringify(await listActive(pool, page, pageSize), null, 2)}\n`);
+      break;
+    }
+    case 'show-active': {
+      const options = parseOptions(args, ['--id']);
+      process.stdout.write(`${JSON.stringify(await showActive(pool, positiveId(options['--id'])), null, 2)}\n`);
+      break;
+    }
+    case 'audit': {
+      const options = parseOptions(args, ['--evaluation-csv', '--evaluation-text-column']);
+      if (!options['--evaluation-csv'] || !options['--evaluation-text-column']) {
+        throw new Error('audit requires --evaluation-csv and --evaluation-text-column');
+      }
+      const evaluation = loadEvaluationCorpus(path.resolve(options['--evaluation-csv']), options['--evaluation-text-column']);
+      process.stdout.write(`${JSON.stringify(await auditActive(pool, evaluation), null, 2)}\n`);
       break;
     }
     default:

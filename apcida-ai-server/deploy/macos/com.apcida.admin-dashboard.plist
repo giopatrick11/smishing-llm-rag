@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.apcida.admin-dashboard</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/giopatrick/smishing-llm-rag/apcida-ai-server/scripts/phase10-run-admin-dashboard.sh</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>/Users/giopatrick/Library/Application Support/ApCiDa/controlled-server/admin-dashboard.log</string>
+  <key>StandardErrorPath</key><string>/Users/giopatrick/Library/Application Support/ApCiDa/controlled-server/admin-dashboard.error.log</string>
+</dict>
+</plist>

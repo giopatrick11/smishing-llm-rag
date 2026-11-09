@@ -24,27 +24,51 @@ async function knowledgeEntries(client) {
   return result.rows.map((row) => ({ id: `active-${row.id}`, signature: signature(row.content) }));
 }
 
+async function withReadOnlyTransaction(pool, action) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN READ ONLY');
+    const result = await action(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function checkImportCandidates(client, rows, evaluationCorpus) {
+  const existing = await client.query('SELECT id, external_id, content, status FROM rag_knowledge_staging');
+  const references = [
+    ...await knowledgeEntries(client),
+    ...existing.rows.map((row) => ({ id: `staged-${row.id}`, signature: signature(row.content) })),
+  ];
+  const existingIds = new Set(existing.rows.map((row) => row.external_id));
+  for (const row of rows) {
+    if (existingIds.has(row.externalId)) throw new Error(`Import row ${row.rowNumber} has an existing external_id`);
+    const candidate = { id: `import-row-${row.rowNumber}`, signature: row.signature };
+    const contamination = evaluationCorpus && findDuplicate(candidate, evaluationCorpus.entries);
+    if (contamination) throw new Error(`Import row ${row.rowNumber} matches the evaluation corpus (${contamination.kind})`);
+    const duplicate = findDuplicate(candidate, references);
+    if (duplicate) throw new Error(`Import row ${row.rowNumber} duplicates existing knowledge (${duplicate.kind})`);
+    references.push(candidate);
+  }
+}
+
+async function validateImport(pool, rows, evaluationCorpus) {
+  return withReadOnlyTransaction(pool, async (client) => {
+    await checkImportCandidates(client, rows, evaluationCorpus);
+    return rows.length;
+  });
+}
+
 async function stageImport(pool, rows, evaluationCorpus = null) {
   return withWriteTransaction(pool, async (client) => {
-    const existing = await client.query('SELECT id, external_id, content, status FROM rag_knowledge_staging');
-    const references = [
-      ...await knowledgeEntries(client),
-      ...existing.rows.map((row) => ({ id: `staged-${row.id}`, signature: signature(row.content) })),
-    ];
-    const existingIds = new Set(existing.rows.map((row) => row.external_id));
-    const candidates = [];
-    for (const row of rows) {
-      if (existingIds.has(row.externalId)) throw new Error(`Import row ${row.rowNumber} has an existing external_id`);
-      const candidate = { id: `import-row-${row.rowNumber}`, signature: row.signature };
-      const contamination = evaluationCorpus && findDuplicate(candidate, evaluationCorpus.entries);
-      if (contamination) throw new Error(`Import row ${row.rowNumber} matches the evaluation corpus (${contamination.kind})`);
-      const duplicate = findDuplicate(candidate, references);
-      if (duplicate) throw new Error(`Import row ${row.rowNumber} duplicates existing knowledge (${duplicate.kind})`);
-      references.push(candidate);
-      candidates.push(row);
-    }
+    await checkImportCandidates(client, rows, evaluationCorpus);
     const ids = [];
-    for (const row of candidates) {
+    for (const row of rows) {
       const inserted = await client.query(`INSERT INTO rag_knowledge_staging
         (external_id, content, label, reviewer, reviewed_at, source_reference, normalized_hash, evaluation_corpus_sha256)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`, [
@@ -157,7 +181,65 @@ async function countActive(pool) {
   return result.rows[0].count;
 }
 
+async function listActive(pool, page, pageSize) {
+  const result = await pool.query(`SELECT id, label, source_type, source_reference, approved_by, approved_at
+    FROM rag_knowledge
+    WHERE is_active = true AND approved_by IS NOT NULL AND approved_at <= now()
+    ORDER BY id LIMIT $1 OFFSET $2`, [pageSize, (page - 1) * pageSize]);
+  return result.rows;
+}
+
+async function showActive(pool, id) {
+  const result = await pool.query(`SELECT id, content, label, source_type, source_reference,
+      approved_by, approved_at, created_at
+    FROM rag_knowledge
+    WHERE id = $1 AND is_active = true AND approved_by IS NOT NULL AND approved_at <= now()`, [id]);
+  if (!result.rows.length) throw new Error('Active knowledge ID not found');
+  return result.rows[0];
+}
+
+async function auditActive(pool, evaluationCorpus) {
+  const rows = await withReadOnlyTransaction(pool, async (client) => {
+    const result = await client.query(`SELECT id, content, label, source_type,
+      approved_by, approved_at <= now() AS approved_now, embedding_model
+      FROM rag_knowledge WHERE is_active = true ORDER BY id`);
+    return result.rows;
+  });
+  const summary = {
+    activeCount: rows.length,
+    retrievableCount: 0,
+    labels: { SCAM: 0, SAFE: 0 },
+    sourceTypes: {},
+    evaluationCorpusSha256: evaluationCorpus.sha256,
+    issues: [],
+  };
+  const seen = [];
+  for (const row of rows) {
+    const id = String(row.id);
+    if (row.approved_by && row.approved_now && row.embedding_model === EMBEDDING_MODEL) {
+      summary.retrievableCount += 1;
+    } else {
+      summary.issues.push({ id, check: 'NOT_RETRIEVABLE' });
+    }
+    if (Object.hasOwn(summary.labels, row.label)) summary.labels[row.label] += 1;
+    summary.sourceTypes[row.source_type] = (summary.sourceTypes[row.source_type] || 0) + 1;
+    let candidate;
+    try {
+      candidate = { id, signature: signature(row.content) };
+    } catch {
+      summary.issues.push({ id, check: 'NO_COMPARABLE_CONTENT' });
+      continue;
+    }
+    const overlap = findDuplicate(candidate, evaluationCorpus.entries);
+    if (overlap) summary.issues.push({ id, check: `EVALUATION_${overlap.kind}` });
+    const duplicate = findDuplicate(candidate, seen);
+    if (duplicate) summary.issues.push({ id, check: `ACTIVE_${duplicate.kind}`, otherId: duplicate.referenceId });
+    seen.push(candidate);
+  }
+  return summary;
+}
+
 module.exports = {
-  stageImport, embedPending, listPending, showEntry, approveEntry, rejectEntry,
-  countActive, knowledgeEntries, withWriteTransaction,
+  validateImport, stageImport, embedPending, listPending, showEntry, approveEntry, rejectEntry,
+  countActive, listActive, showActive, auditActive, knowledgeEntries, withWriteTransaction,
 };

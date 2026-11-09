@@ -159,8 +159,8 @@ async function withServer(app, run) {
 
 test('enrollment endpoint is absent by default and validates one code when enabled', async () => {
   const repository = Object.fromEntries(['findByTokenHash', 'isActive', 'revoke', 'countRequest',
-    'claim', 'complete', 'release', 'acquireSlot', 'releaseSlot'].map((name) => [name, async () => null]));
-  const options = { repository, codec: { requestHmac() {}, encrypt() {}, decrypt() {} },
+    'claim', 'complete', 'release', 'acquireSlot', 'releaseSlot', 'submitReport'].map((name) => [name, async () => null]));
+  const options = { repository, codec: { requestHmac() {}, reportHmac() {}, encrypt() {}, decrypt() {}, encryptReport() {} },
     analysisService: { analyze() {} } };
   const config = { model: 'gemma3:12b', ragEnabled: true, rulesEnabled: true,
     rulesShadowMode: true, verdictPolicy: 'gemma' };
@@ -185,14 +185,14 @@ test('enrollment endpoint is absent by default and validates one code when enabl
 test('renewal endpoint requires an active phone credential and accepts an empty request', async () => {
   const token = 'a'.repeat(43);
   const repository = Object.fromEntries(['findByTokenHash', 'isActive', 'revoke', 'countRequest',
-    'claim', 'complete', 'release', 'acquireSlot', 'releaseSlot'].map((name) => [name, async () => null]));
+    'claim', 'complete', 'release', 'acquireSlot', 'releaseSlot', 'submitReport'].map((name) => [name, async () => null]));
   repository.findByTokenHash = async () => ({ installationId: 'phone-1',
     expiresAt: Date.now() + 86400000, revokedAt: null });
   const config = { model: 'gemma3:12b', ragEnabled: true, rulesEnabled: true,
     rulesShadowMode: true, verdictPolicy: 'gemma' };
   let renewals = 0;
   const app = createProductionApp(config, {
-    repository, codec: { requestHmac() {}, encrypt() {}, decrypt() {} },
+    repository, codec: { requestHmac() {}, reportHmac() {}, encrypt() {}, decrypt() {}, encryptReport() {} },
     analysisService: { analyze() {} }, inviteEnrollment: {
       async redeem() { return null; },
       async renew(id) { assert.equal(id, 'phone-1'); renewals++; return Date.now() + 29 * 86400000; },

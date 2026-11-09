@@ -6,7 +6,7 @@ const path = require('node:path');
 const { parseKnowledgeCsv, loadEvaluationCorpus } = require('../src/knowledge/csv');
 const { signature, duplicateKind } = require('../src/knowledge/dedupe');
 const { requireAdmin } = require('../src/knowledge/adminAuth');
-const { stageImport, approveEntry } = require('../src/knowledge/adminRepository');
+const { validateImport, stageImport, approveEntry, auditActive } = require('../src/knowledge/adminRepository');
 const { lockAndCheckRagKnowledge } = require('../src/knowledge/evaluationGuard');
 const { parseOptions } = require('../src/knowledge/cli');
 const { parseArgs } = require('../src/evaluation/cli');
@@ -68,14 +68,14 @@ test('administrator commands require a matching secret without exposing it', () 
     { '--id': '7', '--approver': 'Admin', '--confirm-reviewed': true });
 });
 
-function fakeStagePool() {
+function fakeStagePool({ staged = [], active = [] } = {}) {
   const calls = [];
   const client = {
     async query(sql, params) {
       calls.push({ sql, params });
       if (sql.includes('pg_try_advisory_xact_lock')) return { rows: [{ locked: true }] };
-      if (sql.includes('SELECT id, external_id, content, status')) return { rows: [] };
-      if (sql.includes('SELECT id, content FROM rag_knowledge')) return { rows: [] };
+      if (sql.includes('SELECT id, external_id, content, status')) return { rows: staged };
+      if (sql.includes('SELECT id, content FROM rag_knowledge')) return { rows: active };
       if (sql.includes('INSERT INTO rag_knowledge_staging')) return { rows: [{ id: '1' }] };
       return { rows: [] };
     },
@@ -83,6 +83,54 @@ function fakeStagePool() {
   };
   return { calls, connect: async () => client };
 }
+
+test('candidate validation is read only and blocks evaluation and knowledge overlap', async () => {
+  const rows = parseKnowledgeCsv(csv);
+  const corpus = { sha256: 'corpus-hash', entries: [{ id: 'eval-1', signature: signature('Your package delivery require payment at this link') }] };
+  const pool = fakeStagePool();
+  await assert.rejects(validateImport(pool, rows, corpus), /evaluation corpus \(NEAR\)/);
+  assert.equal(pool.calls.some((call) => call.sql === 'BEGIN READ ONLY'), true);
+  assert.equal(pool.calls.some((call) => /\b(?:INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+
+  const otherCorpus = { sha256: 'other-corpus', entries: [{ id: 'eval-2', signature: signature('The library opens at 9 AM') }] };
+  assert.equal(await validateImport(pool, rows, otherCorpus), 1);
+  assert.equal(pool.calls.filter((call) => call.sql === 'COMMIT').length, 1);
+  assert.equal(pool.calls.some((call) => /\b(?:INSERT|UPDATE|DELETE)\b/i.test(call.sql)), false);
+
+  const existing = fakeStagePool({ staged: [{ id: '5', external_id: 'k-1', content: 'Unrelated text', status: 'APPROVED' }] });
+  await assert.rejects(validateImport(existing, rows, otherCorpus), /existing external_id/);
+  assert.equal(existing.calls.some((call) => /\bINSERT\b/i.test(call.sql)), false);
+});
+
+test('active knowledge audit reports overlap and duplicate IDs without exposing message text', async () => {
+  const calls = [];
+  const rows = [
+    { id: '1', content: 'Your package delivery requires a payment at this link', label: 'SCAM',
+      source_type: 'CURATED', approved_by: 'Ana', approved_now: true, embedding_model: 'nomic-embed-text' },
+    { id: '2', content: 'Your package delivery require payment at this link', label: 'SCAM',
+      source_type: 'CURATED', approved_by: 'Ana', approved_now: true, embedding_model: 'nomic-embed-text' },
+    { id: '3', content: 'The library opens at 9 AM', label: 'SAFE',
+      source_type: 'CURATED', approved_by: null, approved_now: true, embedding_model: 'nomic-embed-text' },
+  ];
+  const pool = { connect: async () => ({
+    async query(sql) {
+      calls.push(sql);
+      return sql.includes('FROM rag_knowledge WHERE is_active = true ORDER BY id') ? { rows } : { rows: [] };
+    },
+    release() {},
+  }) };
+  const corpus = { sha256: 'evaluation-hash', entries: [{ id: 'eval-1', signature: signature('The library opens at 9 AM') }] };
+  const result = await auditActive(pool, corpus);
+  assert.equal(result.activeCount, 3);
+  assert.equal(result.retrievableCount, 2);
+  assert.deepEqual(result.labels, { SCAM: 2, SAFE: 1 });
+  assert.ok(result.issues.some((issue) => issue.id === '2' && issue.check === 'ACTIVE_NEAR'));
+  assert.ok(result.issues.some((issue) => issue.id === '3' && issue.check === 'EVALUATION_EXACT'));
+  assert.ok(result.issues.some((issue) => issue.id === '3' && issue.check === 'NOT_RETRIEVABLE'));
+  assert.equal(JSON.stringify(result).includes('package delivery'), false);
+  assert.equal(calls.includes('BEGIN READ ONLY'), true);
+  assert.equal(calls.some((sql) => /\b(?:INSERT|UPDATE|DELETE)\b/i.test(sql)), false);
+});
 
 test('contamination blocks all staging writes; clean import only stages entries', async () => {
   const rows = parseKnowledgeCsv(csv);

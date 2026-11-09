@@ -20,7 +20,7 @@ function createInviteRepository(pool) {
     async claim(hash, claimId) {
       const result = await pool.query(`UPDATE production_enrollment_invites
         SET claimed_by = $2, claim_until = now() + interval '90 seconds'
-        WHERE invite_hash = $1 AND expires_at > now() AND used_at IS NULL
+        WHERE invite_hash = $1 AND expires_at > now() AND used_at IS NULL AND canceled_at IS NULL
           AND (claimed_by IS NULL OR claim_until <= now())
         RETURNING label`, [hash, claimId]);
       return result.rows[0] || null;
@@ -36,7 +36,7 @@ function createInviteRepository(pool) {
         await client.query('BEGIN');
         const invite = await client.query(`SELECT label FROM production_enrollment_invites
           WHERE invite_hash = $1 AND claimed_by = $2 AND claim_until > now()
-            AND used_at IS NULL AND expires_at > now() FOR UPDATE`, [hash, claimId]);
+            AND used_at IS NULL AND canceled_at IS NULL AND expires_at > now() FOR UPDATE`, [hash, claimId]);
         if (invite.rowCount !== 1 || invite.rows[0].label !== label) {
           await client.query('ROLLBACK');
           return false;
