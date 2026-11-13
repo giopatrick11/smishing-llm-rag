@@ -298,11 +298,12 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
     const candidate = existingCandidate
       ? `<section class="card"><div class="sectionhead"><h2>RAG candidate</h2>${badge(existingCandidate.status)}</div>
         <p>This report has already been nominated as candidate #${escapeHtml(existingCandidate.id)}.
-        ${candidateOpen ? 'The report stays pending while the candidate awaits a final decision.' : ''}
+        ${candidateOpen ? 'This example is not in live RAG yet. Finish any pending embedding, then approve it from the candidate page to add it immediately.'
+          : existingCandidate.status === 'APPROVED' ? 'This example is in live RAG.' : ''}
         ${reportCandidateLink(existingCandidate)}</p></section>`
       : row.review_status === 'PENDING' && report.consentScope === 'REVIEW_AND_RAG_CANDIDATE'
       ? `<section class="card"><div class="sectionhead"><h2>Prepare a RAG candidate</h2>${badge('PENDING')}</div>
-        <p>Edit the text below to remove personal information. Choose the correct label yourself; the app's verdict is only a clue.</p>
+        <p>Edit the text below to remove personal information. Choose the correct label yourself; the app's verdict is only a clue. Staging does not add the example to live RAG. Final approval does.</p>
         <form method="post" action="${url}/stage" class="stack">
           <input type="hidden" name="csrf" value="${req.adminSession.csrf}">
           <label for="content">Redacted example text</label><textarea id="content" name="content" rows="6" maxlength="2000" required>${escapeHtml(report.smsText)}</textarea>
@@ -405,7 +406,7 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
     const approval = checks === 'PASS' ? `<form class="stack" method="post" action="/staged/${entry.id}/approve">
       <input type="hidden" name="csrf" value="${req.adminSession.csrf}"><p>To make this example available to RAG,
       type <strong>${escapeHtml(phrase)}</strong> below.</p><label for="confirmation">Exact confirmation</label>
-      <input id="confirmation" name="confirmation" required autocomplete="off"><button class="primary">Approve for RAG</button></form>`
+      <input id="confirmation" name="confirmation" required autocomplete="off"><button class="primary">Approve and add to live RAG</button></form>`
       : `<p class="warning">Approval is blocked until the listed checks pass.</p>`;
     res.send(page({ title: 'Candidate detail', csrf: req.adminSession.csrf, active: 'staged',
       body: `<p class="back"><a href="/staged">← All candidates</a></p>${header('Candidate / Final review', `Candidate #${entry.id}`,
@@ -427,11 +428,14 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
       return errorPage(res, req.adminSession.csrf, 'Confirmation did not match. Nothing was approved.');
     }
     try {
-      const approved = await approveBatch(pool, [entry.id], entry.reviewer, corpus);
-      const activeId = approved[0].activeId;
       const match = /^report:([0-9a-f-]+)$/iu.exec(entry.source_reference);
-      if (match) await pool.query(`UPDATE production_reports SET review_status = 'REVIEWED', reviewed_at = now()
-        WHERE client_report_id = $1 AND review_status = 'PENDING'`, [match[1]]);
+      const approved = await approveBatch(pool, [entry.id], entry.reviewer, corpus, {
+        afterApproval: match ? async (client) => {
+          await client.query(`UPDATE production_reports SET review_status = 'REVIEWED', reviewed_at = now()
+            WHERE client_report_id = $1 AND review_status = 'PENDING'`, [match[1]]);
+        } : undefined,
+      });
+      const activeId = approved[0].activeId;
       res.redirect(303, `/knowledge/${activeId}`);
     } catch (error) { return errorPage(res, req.adminSession.csrf, error.message, 409); }
   });
@@ -468,7 +472,7 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
     catch { return errorPage(res, req.adminSession.csrf, 'Active example unavailable.', 404); }
     res.send(page({ title: 'Approved example', csrf: req.adminSession.csrf, active: 'active',
       body: `<p class="back"><a href="/knowledge">← Approved examples</a></p>${header('Live knowledge', `Example #${entry.id}`,
-        'This example may be retrieved by the AI for similar authorized SMS analyses.')}
+        'This approved example is in live RAG now and may be retrieved for similar authorized SMS analyses. No restart is needed.')}
         <section class="card"><dl><dt>Label</dt><dd>${escapeHtml(entry.label)}</dd><dt>Source</dt><dd>${escapeHtml(entry.source_reference || '—')}</dd>
         <dt>Approved by</dt><dd>${escapeHtml(entry.approved_by)}</dd><dt>Approved at</dt><dd>${date(entry.approved_at)}</dd></dl>
         <h2>Example text</h2><p class="sms">${escapeHtml(entry.content)}</p></section>

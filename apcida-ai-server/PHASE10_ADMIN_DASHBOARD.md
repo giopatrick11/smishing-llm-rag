@@ -7,7 +7,7 @@ The dashboard runs on the Mac at `http://127.0.0.1:3022`. It is separate from th
 1. Open **Reports**. The inbox shows report IDs and status, not SMS text. Open a report to view its decrypted content.
 2. **Mark reviewed without RAG** or **Dismiss** if the report does not warrant a knowledge example.
 3. For a report with combined review and RAG consent, remove personal information from the example text, independently choose SCAM or SAFE, and stage it. The app's verdict is an observation, not the verified label.
-4. Open **RAG candidates**. Check the staged text, label, source, reviewer, and validation results. Type the exact confirmation shown to approve. The example enters live RAG only after this second action.
+4. Open **RAG candidates**. Check the staged text, label, source, reviewer, and validation results. Type the exact confirmation shown to approve. Approval inserts the example into live RAG immediately; the dashboard opens its approved example page. No separate import or service restart is needed.
 5. Open **Approved examples** to inspect active examples. Type the deactivation confirmation to stop an example being retrieved in future analyses while retaining its audit record.
 6. Open **Invites & devices** to create a one-use invite for a phone. Copy the code from the creation page immediately and send it privately to that phone's owner. The dashboard stores only its hash, so it cannot show the code again. The invite is available for 24 hours unless used or canceled first.
 7. The same page shows each recent invite as **Available**, **Being redeemed**, **Used**, **Expired**, or **Canceled**. Cancel an unused invite there if it should no longer work.

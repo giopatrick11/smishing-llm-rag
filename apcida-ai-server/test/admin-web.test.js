@@ -118,7 +118,7 @@ test('a pending report with an existing candidate links to it instead of staging
     const html = await detail.text();
     assert.match(html, /Open candidate #3/u);
     assert.match(html, /href="\/staged\/3"/u);
-    assert.match(html, /report stays pending while the candidate awaits a final decision/u);
+    assert.match(html, /This example is not in live RAG yet/u);
     assert.doesNotMatch(html, /Validate and stage candidate/u);
     assert.doesNotMatch(html, /Mark reviewed without RAG/u);
     const repeated = await request(base, `${path}/stage`, { method: 'POST',

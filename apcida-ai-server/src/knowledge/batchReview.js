@@ -90,7 +90,7 @@ async function getReviewEntry(pool, id, corpus) {
   return { ...entry, duplicateCheckStatus: checkStagedEntry(entry, references, corpus) };
 }
 
-async function approveBatch(pool, ids, approver, corpus) {
+async function approveBatch(pool, ids, approver, corpus, { afterApproval } = {}) {
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 20
     || ids.some((id) => !/^\d+$/.test(String(id))) || new Set(ids.map(String)).size !== ids.length) {
     throw new Error('Select 1 to 20 distinct staged IDs');
@@ -108,7 +108,9 @@ async function approveBatch(pool, ids, approver, corpus) {
         throw new Error(`Staged ID ${row.id} cannot be approved: ${problems.join(', ') || 'NOT_EMBEDDED'}`);
       }
     }
-    return insertApprovedRows(client, selected.rows, approver);
+    const approved = await insertApprovedRows(client, selected.rows, approver);
+    if (afterApproval) await afterApproval(client, approved);
+    return approved;
   });
 }
 

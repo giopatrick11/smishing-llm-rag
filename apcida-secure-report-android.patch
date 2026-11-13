@@ -1,0 +1,511 @@
+diff --git a/README.md b/README.md
+index 28d2658..9b5ae31 100644
+--- a/README.md
++++ b/README.md
+@@ -177,39 +177,17 @@ The model file is large — do **not** commit it to GitHub. Add to `.gitignore`:
+ ## Notes
+ 
+ - Keyword scores determine preliminary risk: 0–29 SAFE, 30–59 SUSPICIOUS, 60+ SCAM. Every score proceeds to Gemma.
+-- The reporting API sends anonymized metadata; it does not upload SMS content, sender addresses, or contact names.
++- The report upload sends the selected issue, optional remarks, observed verdict, and rule score. SMS text is uploaded only when the reporter explicitly checks its box. Sender addresses and contact names are not uploaded.
+ - New messages store the sender address locally so it can be shown in the inbox and detail screen. Existing messages keep "Unknown Sender" because their saved hashes cannot recover the address.
+ - Contact names are optional. The inbox offers contact access once and keeps a Show/Hide contact names menu option. The app looks up only saved SMS sender numbers and does not save or upload contact names. Unknown numbers and alphanumeric sender IDs display as received. Contact membership does not change either numeric score; the existing final-verdict policy uses it only under strict conditions.
+ 
+-## Report Server Plan
++## Private report submission
+ 
+-Report collection is handled by a separate server, not by the Android app itself. Reporting is optional feedback for a saved message that was not scanned or whose scan result seems wrong. The report button is available for safe and flagged messages. Only after the user submits the form does the app send anonymized report metadata to the configured `BASE_URL` over HTTPS.
++Reporting is optional feedback for a saved message that was not scanned or whose scan result seems wrong. The Report button saves a local snapshot, then WorkManager queues an upload to the controlled API at `https://sms.apcida.stream/api/v1/reports`. The app uses that phone's invite-issued installation credential and Cloudflare Access service token, which are stored with Android Keystore. There is no shared report API key in the APK.
+ 
+-The default reporting API base URL is `https://apcida-server.onrender.com/api/`.
+-To enable uploads in a local Android build, add the key configured on the
+-deployed server to the ignored root `local.properties` file:
++The server stores encrypted reports in a table separate from RAG. A report is received for human review; it does not change the AI example library automatically. Server copies expire after 30 days and are purged hourly; removal of service access deletes them sooner. The local copy stays on the phone until deleted there. Reports saved by older builds stay local after an upgrade.
+ 
+-```properties
+-apcida.reportApiKey=<same key configured on the deployed server>
+-```
+-
+-For CI, use the `APCIDA_REPORT_API_KEY` environment variable instead. The
+-optional `apcida.reportBaseUrl` property or `APCIDA_REPORT_BASE_URL` environment
+-variable can override the default URL; the URL must end in `/api/`. If no key
+-is supplied, reports remain pending on the device. Do not commit the key.
+-
+-For the thesis prototype, report submissions should be authenticated with a shared API key and timestamp:
+-
+-```text
+-X-API-Key: <shared app/reporting key>
+-X-Timestamp: <request timestamp>
+-```
+-
+-The server checks the API key and rejects stale timestamps before accepting the report. This validates that the report request came from an authorized app client, while the SMS detection decision itself still comes from the on-device keyword and Gemma pipeline.
+-
+-Recommended hosting for the prototype: **Render or Railway with a small Node/Express REST API and hosted Postgres**. This keeps deployment simple, works naturally with Retrofit, and is enough for accepting optional scan feedback during thesis evaluation. Firebase Cloud Functions + Firestore is a reasonable second option if the team wants less server management, while a university VPS is useful only if access and setup support are readily available.
+-
+-Report uploads use WorkManager with a network constraint and retry after temporary failures. The app schedules an attempt on startup, after report submission, and when the Reports screen opens. A report stays Pending until the server acknowledges it with `success: true` and a report ID; then the local row changes to Sent. If the server stored a report but the app lost the response, the retry sends the same payload and the server returns its existing report ID. The request timeout is 90 seconds to allow the free server to wake from idle. Builds without a reporting key leave reports Pending.
++Uploads require an enrolled phone and the approved HTTPS host in the build. The Reports screen shows **Pending** while waiting and **Received for review** after the server acknowledges the report ID. Retries reuse the same ID so a lost response does not create a second report. The backend's `PHASE8_SECURE_REPORTS.md` describes the server setup and review workflow.
+ 
+ ## Roadmap
+ 
+diff --git a/app/src/main/java/com/apcida/smishingdetector/backend/enrollment/InviteEnrollmentService.kt b/app/src/main/java/com/apcida/smishingdetector/backend/enrollment/InviteEnrollmentService.kt
+index c3b172a..552b4ee 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/backend/enrollment/InviteEnrollmentService.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/backend/enrollment/InviteEnrollmentService.kt
+@@ -8,6 +8,7 @@ import com.apcida.smishingdetector.backend.network.CloudflareAccessCredentialSto
+ import com.apcida.smishingdetector.backend.network.ProductionCredentialStore
+ import com.apcida.smishingdetector.backend.network.ProductionRevocationClient
+ import com.apcida.smishingdetector.backend.worker.ProductionRenewalWorker
++import com.apcida.smishingdetector.backend.reporting.ReportUploadEligibility
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.NonCancellable
+ import kotlinx.coroutines.withContext
+@@ -38,6 +39,7 @@ internal class InviteEnrollmentService(context: Context) {
+                 try {
+                     backend.provision(bundle.installationToken, bundle.expiresAt)
+                     access.provision(bundle.clientId, bundle.clientSecret)
++                    ReportUploadEligibility.beginNewEnrollment(app)
+                     runCatching { ProductionRenewalWorker.scheduleIfConfigured(app) }
+                     return@withLock Result.SET_UP
+                 } catch (_: Exception) {
+diff --git a/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportApiService.kt b/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportApiService.kt
+index 2f9aa80..abd4ea0 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportApiService.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportApiService.kt
+@@ -1,53 +1,33 @@
+ package com.apcida.smishingdetector.backend.network
+ 
+-import com.apcida.smishingdetector.util.Constants
+ import retrofit2.Response
+ import retrofit2.http.Body
+ import retrofit2.http.Header
+ import retrofit2.http.POST
+ 
+-/**
+- * Retrofit interface for submitting feedback and a scan snapshot.
+- * SMS text is sent only when the user opts in.
+- */
++/** Feedback uses the same private installation and Cloudflare credentials as remote analysis. */
+ interface ReportApiService {
+-
+-    @POST(Constants.REPORT_ENDPOINT)
++    @POST("api/v1/reports")
+     suspend fun submitReport(
+-        @Header(Constants.REPORT_API_KEY_HEADER) apiKey: String,
+-        @Header(Constants.REPORT_TIMESTAMP_HEADER) timestamp: Long,
++        @Header("Authorization") authorization: String,
++        @Header("CF-Access-Client-Id") clientId: String,
++        @Header("CF-Access-Client-Secret") clientSecret: String,
+         @Body report: ReportPayload
+     ): Response<ReportResponse>
+ }
+ 
+-/**
+- * Submission-time scan snapshot and optional user-approved SMS text.
+- */
++/** No sender, rationale, indicators, or SMS body unless sharing was checked. */
+ data class ReportPayload(
++    val clientReportId: String,
+     val reportType: String,
+     val remarks: String?,
+-    val riskScore: Float?,
+-    val gemmaClassification: String?,
+-    val gemmaRationale: String?,
+-    val detectedKeywords: List<String>,
+-    val reportedAt: Long,
+-    val appVersion: String,
+-    val clientReportId: String?,
+-    val finalVerdict: String?,
+-    val ruleVerdict: String?,
+-    val processingState: String?,
+-    val aiStatus: String?,
+-    val gemmaConfidence: String?,
+-    val modelVersion: String?,
+     val smsText: String?,
+-    val messageSharingConsent: Boolean?
++    val messageSharingConsent: Boolean,
++    val observedVerdict: String?,
++    val riskScore: Float?,
+ )
+ 
+-/**
+- * Server response after report submission.
+- */
+ data class ReportResponse(
+-    val success: Boolean,
+-    val message: String?,
+-    val reportId: String?
++    val reportId: String?,
++    val status: String?
+ )
+diff --git a/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportUploadManager.kt b/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportUploadManager.kt
+index ca2e232..04f79a1 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportUploadManager.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/backend/network/ReportUploadManager.kt
+@@ -7,172 +7,87 @@ import android.util.Log
+ import com.apcida.smishingdetector.BuildConfig
+ import com.apcida.smishingdetector.backend.database.AppDatabase
+ import com.apcida.smishingdetector.backend.repository.ReportRepository
++import com.apcida.smishingdetector.backend.reporting.ReportUploadEligibility
+ import com.apcida.smishingdetector.model.entity.Report
+-import com.apcida.smishingdetector.util.Constants
+ import kotlinx.coroutines.CancellationException
+ import kotlinx.coroutines.Dispatchers
+ import kotlinx.coroutines.withContext
+ import okhttp3.OkHttpClient
+ import retrofit2.Retrofit
+ import retrofit2.converter.gson.GsonConverterFactory
++import java.util.UUID
+ import java.util.concurrent.TimeUnit
+ 
++/** Uploads explicitly submitted reports using this phone's invite-issued credentials. */
+ class ReportUploadManager(private val context: Context) {
++    companion object { private const val TAG = "ReportUploadManager" }
+ 
+-    companion object {
+-        private const val TAG = "ReportUploadManager"
+-        private const val TIMEOUT_SECONDS = 90L
+-    }
+-
+-    private val database = AppDatabase.getInstance(context)
+-    private val reportRepository = ReportRepository(database.reportDao())
+-
+-    // Lazy initialization — only created when needed
+-    private val apiService: ReportApiService by lazy {
+-        createApiService()
+-    }
++    private val app = context.applicationContext
++    private val repository = ReportRepository(AppDatabase.getInstance(app).reportDao())
+ 
+-    /**
+-     * Checks for unsent reports and attempts to upload them
+-     * to the remote server if internet is available.
+-     *
+-     * Call this:
+-     * - On app startup
+-     * - After a new report is submitted
+-     */
+     suspend fun uploadPendingReports(): Boolean = withContext(Dispatchers.IO) {
+-        val unsentReports = reportRepository.getUnsentReports()
+-
+-        if (unsentReports.isEmpty()) {
+-            Log.d(TAG, "No pending reports to upload.")
+-            return@withContext true
+-        }
+-
+-        if (!isInternetAvailable()) {
+-            Log.d(TAG, "No internet connection. Skipping upload.")
+-            return@withContext false
+-        }
+-
+-        if (!isReportServerConfigured()) {
+-            Log.w(TAG, "Report server is not configured. Leaving reports pending.")
+-            return@withContext false
+-        }
+-
+-        Log.d(TAG, "Found ${unsentReports.size} unsent report(s). Uploading...")
+-
+-        for (report in unsentReports) {
+-            uploadSingleReport(report)
++        val pending = repository.getUnsentReports().filter {
++            ReportUploadEligibility.isEligible(app, it.reportedAt)
+         }
++        if (pending.isEmpty()) return@withContext true
++        if (!isInternetAvailable()) return@withContext false
++        val host = BuildConfig.PRODUCTION_APPROVED_HOST
++        val origin = "https://$host"
++        if (!ProductionEndpointPolicy.isApprovedHttpsOrigin(origin, host) ||
++            host.endsWith(".trycloudflare.com", ignoreCase = true)) return@withContext false
++        val backend = ProductionCredentialStore(app).get() ?: return@withContext false
++        val access = CloudflareAccessCredentialStore(app).get() ?: return@withContext false
++        val api = Retrofit.Builder().baseUrl("$origin/")
++            .client(OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
++                .readTimeout(25, TimeUnit.SECONDS).callTimeout(35, TimeUnit.SECONDS)
++                .followRedirects(false).followSslRedirects(false).build())
++            .addConverterFactory(GsonConverterFactory.create()).build()
++            .create(ReportApiService::class.java)
+ 
+-        return@withContext reportRepository.getUnsentReportCount() == 0
++        for (report in pending) uploadOne(report, api, backend, access)
++        repository.getUnsentReports().none { ReportUploadEligibility.isEligible(app, it.reportedAt) }
+     }
+ 
+-    /**
+-     * Uploads a single report to the remote server.
+-     * Marks the report as sent on success.
+-     * Logs the error and leaves is_sent = false on failure
+-     * so it can be retried later.
+-     */
+-    private suspend fun uploadSingleReport(report: Report) {
++    private suspend fun uploadOne(
++        report: Report, api: ReportApiService, backend: String,
++        access: CloudflareAccessCredential
++    ) {
++        val id = report.clientReportId?.takeIf {
++            runCatching { UUID.fromString(it) }.isSuccess
++        } ?: return // Old local reports without a durable UUID stay local.
++        val sms = report.smsTextSnapshot?.takeIf { it.isNotEmpty() && it.length <= 4000 }
++        val payload = ReportPayload(
++            clientReportId = id,
++            reportType = report.reportType,
++            remarks = report.remarks?.take(500),
++            smsText = sms,
++            messageSharingConsent = sms != null,
++            observedVerdict = report.finalVerdictSnapshot?.takeIf {
++                it in setOf("SAFE", "SUSPICIOUS", "SCAM", "UNVERIFIED")
++            },
++            riskScore = report.riskScoreSnapshot?.takeIf { it.isFinite() && it in 0f..100f }
++        )
+         try {
+-            val matchedKeywords = report.matchedIndicatorsSnapshot
+-                ?.lineSequence()
+-                ?.filter { it.isNotBlank() }
+-                ?.distinct()
+-                ?.take(30)
+-                ?.toList()
+-                ?: emptyList()
+-
+-            // Every field comes from the local report snapshot, never the message row.
+-            val payload = ReportPayload(
+-                reportType = report.reportType,
+-                remarks = report.remarks,
+-                riskScore = report.riskScoreSnapshot,
+-                gemmaClassification = report.gemmaClassificationSnapshot,
+-                gemmaRationale = report.gemmaRationaleSnapshot,
+-                detectedKeywords = matchedKeywords,
+-                reportedAt = report.reportedAt,
+-                appVersion = report.appVersionSnapshot ?: BuildConfig.VERSION_NAME,
+-                clientReportId = report.clientReportId,
+-                finalVerdict = report.finalVerdictSnapshot,
+-                ruleVerdict = report.ruleVerdictSnapshot,
+-                processingState = report.processingStateSnapshot,
+-                aiStatus = report.aiStatusSnapshot,
+-                gemmaConfidence = report.gemmaConfidenceSnapshot,
+-                modelVersion = report.modelVersionSnapshot,
+-                smsText = report.smsTextSnapshot,
+-                messageSharingConsent = if (report.clientReportId != null) {
+-                    report.smsTextSnapshot != null
+-                } else null
+-            )
+-
+-            val response = apiService.submitReport(
+-                apiKey = Constants.REPORT_API_KEY,
+-                timestamp = System.currentTimeMillis(),
+-                report = payload
+-            )
+-
+-            if (response.isSuccessful &&
+-                response.body()?.success == true &&
+-                !response.body()?.reportId.isNullOrBlank()
+-            ) {
+-                reportRepository.markReportAsSent(report.reportId)
+-                Log.d(TAG, "Report ${report.reportId} uploaded successfully.")
++            val response = api.submitReport("Bearer $backend", access.clientId,
++                access.clientSecret, payload)
++            if (response.code() in listOf(200, 201) &&
++                response.body()?.reportId == id &&
++                response.body()?.status == "RECEIVED_FOR_REVIEW") {
++                repository.markReportAsSent(report.reportId)
+             } else {
+-                Log.w(
+-                    TAG,
+-                    "Report ${report.reportId} upload failed. " +
+-                            "Server returned HTTP ${response.code()}"
+-                )
++                Log.w(TAG, "Report upload returned HTTP ${response.code()}; pending for retry.")
+             }
+-
+-        } catch (e: CancellationException) {
+-            throw e
+-        } catch (e: Exception) {
+-            Log.e(TAG, "Report ${report.reportId} upload failed; will retry.")
+-            // Report stays as is_sent = false for retry on next attempt
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (_: Exception) {
++            Log.w(TAG, "Report upload unavailable; pending for retry.")
+         }
+     }
+ 
+-    /**
+-     * Checks if the device has an active internet connection.
+-     */
+     fun isInternetAvailable(): Boolean {
+-        val connectivityManager = context.getSystemService(
+-            Context.CONNECTIVITY_SERVICE
+-        ) as ConnectivityManager
+-
+-        val network = connectivityManager.activeNetwork ?: return false
+-        val capabilities = connectivityManager
+-            .getNetworkCapabilities(network) ?: return false
+-
+-        return capabilities.hasCapability(
+-            NetworkCapabilities.NET_CAPABILITY_INTERNET
+-        )
+-    }
+-
+-    private fun isReportServerConfigured(): Boolean {
+-        return Constants.BASE_URL.startsWith("https://") &&
+-                Constants.BASE_URL.endsWith("/") &&
+-                Constants.REPORT_API_KEY.isNotBlank()
+-    }
+-
+-    /**
+-     * Creates the Retrofit API service instance with
+-     * logging and timeout configuration.
+-     */
+-    private fun createApiService(): ReportApiService {
+-        val okHttpClient = OkHttpClient.Builder()
+-            .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+-            .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+-            .writeTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+-            .build()
+-
+-        return Retrofit.Builder()
+-            .baseUrl(Constants.BASE_URL)
+-            .client(okHttpClient)
+-            .addConverterFactory(GsonConverterFactory.create())
+-            .build()
+-            .create(ReportApiService::class.java)
++        val manager = app.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
++        val network = manager.activeNetwork ?: return false
++        return manager.getNetworkCapabilities(network)
++            ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+     }
+ }
+diff --git a/app/src/main/java/com/apcida/smishingdetector/backend/worker/ReportUploadWorker.kt b/app/src/main/java/com/apcida/smishingdetector/backend/worker/ReportUploadWorker.kt
+index a34568e..489e188 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/backend/worker/ReportUploadWorker.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/backend/worker/ReportUploadWorker.kt
+@@ -1,7 +1,6 @@
+ package com.apcida.smishingdetector.backend.worker
+ 
+ import android.content.Context
+-import com.apcida.smishingdetector.BuildConfig
+ import android.util.Log
+ import androidx.work.BackoffPolicy
+ import androidx.work.Constraints
+@@ -27,8 +26,6 @@ class ReportUploadWorker(
+         private const val MAX_ATTEMPTS = 6
+ 
+         fun enqueue(context: Context) {
+-            // Local reports remain saved; this build has no approved outbound report credential.
+-            if (BuildConfig.REPORT_API_KEY.isBlank()) return
+             val constraints = Constraints.Builder()
+                 .setRequiredNetworkType(NetworkType.CONNECTED)
+                 .build()
+diff --git a/app/src/main/java/com/apcida/smishingdetector/view/activity/MainActivity.kt b/app/src/main/java/com/apcida/smishingdetector/view/activity/MainActivity.kt
+index 02b9319..28b86ea 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/view/activity/MainActivity.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/view/activity/MainActivity.kt
+@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
+         showConsentOnboardingIfNeeded()
+         recoverOrphanedAiWork()
+         ProductionRevocationWorker.enqueueIfPending(applicationContext)
++        com.apcida.smishingdetector.backend.reporting.ReportUploadEligibility.initialize(applicationContext)
+         ReportUploadWorker.enqueue(applicationContext)
+         requestRequiredPermissions()
+     }
+diff --git a/app/src/main/java/com/apcida/smishingdetector/view/adapter/ReportLogAdapter.kt b/app/src/main/java/com/apcida/smishingdetector/view/adapter/ReportLogAdapter.kt
+index 3343947..cde99ab 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/view/adapter/ReportLogAdapter.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/view/adapter/ReportLogAdapter.kt
+@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
+ import androidx.recyclerview.widget.RecyclerView
+ import com.apcida.smishingdetector.databinding.ItemReportLogBinding
+ import com.apcida.smishingdetector.model.entity.Report
++import com.apcida.smishingdetector.backend.reporting.ReportUploadEligibility
+ import java.text.SimpleDateFormat
+ import java.util.Date
+ import java.util.Locale
+@@ -41,8 +42,11 @@ class ReportLogAdapter : ListAdapter<Report, ReportLogAdapter.ReportViewHolder>(
+                 textReportType.text = report.reportType
+ 
+                 // Sent status
+-                if (report.isSent) {
+-                    textReportStatus.text = "Sent ✓"
++                if (!ReportUploadEligibility.isEligible(root.context, report.reportedAt)) {
++                    textReportStatus.text = "Saved locally"
++                    textReportStatus.setTextColor(Color.parseColor("#616161"))
++                } else if (report.isSent) {
++                    textReportStatus.text = "Received for review ✓"
+                     textReportStatus.setTextColor(Color.parseColor("#2E7D32"))
+                 } else {
+                     textReportStatus.text = "Pending"
+@@ -76,4 +80,4 @@ class ReportLogAdapter : ListAdapter<Report, ReportLogAdapter.ReportViewHolder>(
+             return oldItem == newItem
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/app/src/main/java/com/apcida/smishingdetector/view/fragment/MessageDetailFragment.kt b/app/src/main/java/com/apcida/smishingdetector/view/fragment/MessageDetailFragment.kt
+index 3860f91..93fd8dc 100644
+--- a/app/src/main/java/com/apcida/smishingdetector/view/fragment/MessageDetailFragment.kt
++++ b/app/src/main/java/com/apcida/smishingdetector/view/fragment/MessageDetailFragment.kt
+@@ -378,7 +378,7 @@ class MessageDetailFragment : Fragment() {
+ 
+             Toast.makeText(
+                 requireContext(),
+-                "Report saved on this device. Sharing is unavailable in this build.",
++                "Report saved. Check Reports for its upload status.",
+                 Toast.LENGTH_SHORT
+             ).show()
+         }
+diff --git a/app/src/main/res/layout/dialog_report_form.xml b/app/src/main/res/layout/dialog_report_form.xml
+index bc6868e..a3a4171 100644
+--- a/app/src/main/res/layout/dialog_report_form.xml
++++ b/app/src/main/res/layout/dialog_report_form.xml
+@@ -20,7 +20,7 @@
+         android:layout_width="match_parent"
+         android:layout_height="wrap_content"
+         android:fontFamily="@font/dm_sans_regular"
+-        android:text="Tell us if the scan did not finish or its result seems wrong."
++        android:text="Tell us if the scan did not finish or its result seems wrong. Your report type and optional remarks are queued for private review when this phone has service access. SMS text is sent only if you check the box below. Server copies are kept for about 30 days; the local copy stays on this phone until you remove it. Reports are not added to the AI examples automatically."
+         android:textColor="@color/text_secondary"
+         android:textSize="14sp" />
+ 
+@@ -76,7 +76,7 @@
+         android:hint="What result did you expect?"
+         android:inputType="textCapSentences|textMultiLine"
+         android:maxLines="5"
+-        android:maxLength="1000"
++        android:maxLength="500"
+         android:padding="16dp"
+         android:textColor="@color/text_primary"
+         android:textColorHint="@color/text_secondary"
+diff --git a/app/src/main/java/com/apcida/smishingdetector/backend/reporting/ReportUploadEligibility.kt b/app/src/main/java/com/apcida/smishingdetector/backend/reporting/ReportUploadEligibility.kt
+new file mode 100644
+index 0000000..182961f
+--- /dev/null
++++ b/app/src/main/java/com/apcida/smishingdetector/backend/reporting/ReportUploadEligibility.kt
+@@ -0,0 +1,30 @@
++package com.apcida.smishingdetector.backend.reporting
++
++import android.content.Context
++
++/** Keeps reports from older builds or prior installations local after an app upgrade. */
++object ReportUploadEligibility {
++    private const val PREFS = "report_upload_eligibility_v1"
++    private const val CUTOFF = "eligible_after"
++
++    fun initialize(context: Context): Long {
++        val preferences = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
++        val existing = preferences.getLong(CUTOFF, 0L)
++        if (existing > 0L) return existing
++        val now = System.currentTimeMillis()
++        check(preferences.edit().putLong(CUTOFF, now).commit()) {
++            "Could not establish report upload consent boundary"
++        }
++        return now
++    }
++
++    fun beginNewEnrollment(context: Context) {
++        val preferences = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
++        check(preferences.edit().putLong(CUTOFF, System.currentTimeMillis()).commit()) {
++            "Could not establish enrollment report boundary"
++        }
++    }
++
++    fun isEligible(context: Context, reportedAt: Long): Boolean =
++        reportedAt >= initialize(context)
++}

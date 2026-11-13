@@ -106,6 +106,28 @@ test('batch approval rechecks all rows and commits selected entries atomically',
   assert.equal(pool.calls.filter((call) => call.sql === 'COMMIT').length, 1);
 });
 
+test('report status update shares the approval transaction and rolls back on failure', async () => {
+  const pool = fakeApprovalPool([staged(4)]);
+  const approved = await approveBatch(pool, ['4'], 'Administrator', corpus, {
+    afterApproval: async (client, rows) => {
+      assert.deepEqual(rows, [{ stagedId: '4', activeId: '20' }]);
+      await client.query('UPDATE production_reports SET review_status = $1', ['REVIEWED']);
+    },
+  });
+  assert.equal(approved[0].activeId, '20');
+  const insertIndex = pool.calls.findIndex((call) => call.sql.includes('INSERT INTO rag_knowledge\n'));
+  const reportIndex = pool.calls.findIndex((call) => call.sql.startsWith('UPDATE production_reports'));
+  const commitIndex = pool.calls.findIndex((call) => call.sql === 'COMMIT');
+  assert.ok(insertIndex < reportIndex && reportIndex < commitIndex);
+
+  const failing = fakeApprovalPool([staged(4)]);
+  await assert.rejects(approveBatch(failing, ['4'], 'Administrator', corpus, {
+    afterApproval: async () => { throw new Error('report update failed'); },
+  }), /report update failed/);
+  assert.equal(failing.calls.filter((call) => call.sql === 'ROLLBACK').length, 1);
+  assert.equal(failing.calls.filter((call) => call.sql === 'COMMIT').length, 0);
+});
+
 test('batch approval rolls back before writes when any selected row has a problem', async () => {
   const pool = fakeApprovalPool([staged(4), { ...staged(5), evaluation_corpus_sha256: 'wrong' }]);
   await assert.rejects(approveBatch(pool, ['4', '5'], 'Administrator', corpus), /CORPUS_MISMATCH/);
