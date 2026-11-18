@@ -1,0 +1,10 @@
+[
+  { "id": "T01", "text": "Your OTP is 839201. Do not share it with anyone.", "label": "SAFE", "category": "legitimate-otp" },
+  { "id": "T02", "text": "Ihatag imong OTP diri para ma-unlock ang imong account.", "label": "SCAM", "category": "cebuano-credential-request" },
+  { "id": "T03", "text": "Maayong buntag! Kita ta ugma sa school.", "label": "SAFE", "category": "ordinary-conversation" },
+  { "id": "T04", "text": "Pa-send sa code nimo para ma-verify nako imong account.", "label": "SCAM", "category": "informal-account-code" },
+  { "id": "T05", "text": "Hi Ma, bag-o ni akong number. Pwede ko pahulam kwarta?", "label": "SUSPICIOUS", "category": "family-new-number" },
+  { "id": "T06", "text": "Your parcel is ready for pickup at the branch.", "label": "SAFE", "category": "ordinary-delivery" },
+  { "id": "T07", "text": "Click https://bit.ly/apcida-synthetic-example to update your details.", "label": "SUSPICIOUS", "category": "shortened-link" },
+  { "id": "T08", "text": "Ayaw ihatag imong password bisan kinsa.", "label": "SAFE", "category": "cebuano-security-warning" }
+]

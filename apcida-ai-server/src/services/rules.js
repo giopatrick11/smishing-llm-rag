@@ -1,31 +1,49 @@
 // Heuristic evidence for review. No sender, domain, or payment destination is verified.
-const VERSION = 2;
+const VERSION = 3;
 const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+|\b[a-z0-9][a-z0-9.-]+\.[a-z]{2,12}(?:\/[\w/?#%&=.+-]*)?/giu;
 const SECRET = /\b(?:otp|one[- ]time (?:pin|password|code)|six[- ]digit (?:otp|code)|sms code|verification code|login code|recovery code|pin|password|passcode|cvv|security code|security answers?|login credentials?|banking credentials?|banking login|bank login|administrator login code|login|username|card details|atm pin)\b/iu;
-const DISCLOSE = /\b(?:send|share|reply with|replying with|text back|reveal|disclose|provide|give|submit|ibigay|ipadala|isend|i-send|i-reply|ihatag|ipasa|isubmit|i-submit|ipakita)\b/iu;
+const DISCLOSE = /\b(?:send|pa[ -]?send|paki[ -]?send|pasend|pakisend|share|reply with|replying with|text back|reveal|disclose|provide|give|submit|ibigay|ipadala|isend|i-send|i-reply|ihatag|ipasa|isubmit|i-submit|ipakita)\b/iu;
 const ENTER = /\b(?:enter|type|verify|update|confirm|ilagay|i-enter|i-type|i-verify|i-update|i-click|pindutin|i-tap)\b/iu;
-const NEGATIVE_SHARE = /\b(?:do not|don't|never|huwag|wag|ayaw|dili)\b.{0,30}\b(?:share|send|ibigay|ipadala|ihatag|i-share|i-send)\b/giu;
+const NEGATIVE_SHARE = /\b(?:do not|don't|never|huwag|wag|ayaw|dili)\b.{0,30}\b(?:share|send|pasend|pakisend|ibigay|ipadala|ihatag|i-share|i-send)\b/giu;
 const PAYMENT_VERB = /\b(?:pay|settle|deposit|transfer|send money|send funds|send it back|need money|buy|purchase|bayad|bayaran|magbayad|mobayad|bayri|hulog|maghulog|padala|ipadala|i-send|isend|magpadala)\b/iu;
 const PAYMENT_OBJECT = /\b(?:money|funds|cash|kwarta|pera|bayad|payment|fee|charge|deposit|tax|fine|multa|bill|wallet|account|gift cards?|php|piso)\b/iu;
 const SELF_CLAIM = /\b(?:we are|this is|i am|i'm|from|official|representative|agent|kami|ako|taga|mula|gikan|kuno)\b/iu;
 const AUTHORITY = /\b(?:bank|bdo|bpi|metrobank|gcash|maya|e-wallet|wallet|mobile network|sim provider|telecom|police|court|government|gobyerno|ahensiya|bir|sss|philhealth|hr|manager|teacher|school|security team|support|customer service|tech support|refund desk|courier|parcel office|company|kompanya)\b/iu;
 const ACCOUNT_PROBLEM = /\b(?:account|e-wallet|banking|sim|subscription|payroll|deposit|profile|business listing|employment|enrollment|scholarship|refund|payment|card)\b.{0,70}\b(?:fail(?:ed|ure)?|expire[ds]?|suspend(?:ed)?|suspension|block(?:ed)?|lock(?:ed)?|remove[ds]?|cancel(?:led|ed|ation)?|charge[ds]?|forfeit(?:ed)?|reactivat(?:e|ion)|reversal|problem|problema|na-expire|makakansela|mawawala|ma-suspend)\b|\b(?:fail(?:ed|ure)?|expire[ds]?|suspend(?:ed)?|suspension|block(?:ed)?|lock(?:ed)?|remove[ds]?|cancel(?:led|ed|ation)?|charge[ds]?|forfeit(?:ed)?|reactivat(?:e|ion)|reversal|problem|problema|na-expire|makakansela|mawawala|ma-suspend)\b.{0,70}\b(?:account|e-wallet|banking|sim|subscription|payroll|deposit|profile|business listing|employment|enrollment|scholarship|refund|payment|card)\b/iu;
+const ACCOUNT_CODE_CONTEXT = /\b(?:account|acct|login|log in|verification|verify|ma-verify|i-verify|sim|otp|bank|gcash|maya|reset|unlock|ma-unlock)\b/iu;
+const REQUEST_FILLER = new Set(['a', 'account', 'ang', 'akong', 'ato', 'bank', 'daw', 'dito', 'diri', 'imong', 'imo', 'iyong',
+  'jud', 'kanako', 'kini', 'ko', 'lang', 'me', 'mo', 'my', 'na', 'ng', 'ni', 'niko', 'nimo', 'ninyong',
+  'nako', 'our', 'please', 'po', 'sa', 'sms', 'the', 'to', 'us', 'your']);
 
 function indicator(code, category, score, explanation) {
   return { code, category, score, explanation };
 }
 
-function near(left, right, text, distance = 85) {
-  const a = left.exec(text);
-  const b = right.exec(text);
-  return !!(a && b && Math.abs(a.index - b.index) <= distance);
+function clauses(text) {
+  return text.split(/(?:[.!?;](?=\s|$)\s*|\n+)/u).filter(Boolean);
+}
+
+function matches(pattern, text) {
+  return [...text.matchAll(new RegExp(pattern.source, 'giu'))];
+}
+
+function directRequest(clause, action, object) {
+  for (const verb of matches(action, clause)) {
+    for (const target of matches(object, clause)) {
+      const gap = clause.slice(verb.index + verb[0].length, target.index);
+      if (target.index < verb.index + verb[0].length || gap.length > 50) continue;
+      const words = gap.trim().split(/\s+/u).filter(Boolean);
+      if (words.every((word) => REQUEST_FILLER.has(word))) return true;
+    }
+  }
+  return false;
 }
 
 function analyzeRules(sms) {
   const text = typeof sms === 'string' ? sms : sms?.text;
   if (typeof text !== 'string') throw new TypeError('SMS text is required');
   const normalized = text.normalize('NFKC').toLocaleLowerCase();
-  const withoutWarnings = normalized.replace(NEGATIVE_SHARE, ' ');
+  const requestClauses = clauses(normalized).map((clause) => clause.replace(NEGATIVE_SHARE, ' '));
   const indicators = [];
   const add = (condition, code, category, score, explanation) => {
     if (condition) indicators.push(indicator(code, category, score, explanation));
@@ -51,15 +69,22 @@ function analyzeRules(sms) {
   if (urlCode) indicators.push(indicator(urlCode, 'url', Math.min(80, urlScore), urlCode === 'LINK_PRESENT'
     ? 'Contains a link; the link alone is weak evidence.' : 'Contains a suspicious or obscured address.'));
 
-  const organizationNeedsSecret = /\b(?:we|bank|team|namin|namo|kami)\b.{0,25}\b(?:need|needs|kailangan|kinahanglan)\b.{0,45}\b(?:otp|pin|password|cvv|code|login)\b|\b(?:kailangan|kinahanglan)\b.{0,20}\b(?:namin|namo)\b.{0,45}\b(?:otp|pin|password|cvv|code|login)\b/iu.test(withoutWarnings);
-  const secretDisclosure = near(DISCLOSE, SECRET, withoutWarnings) || organizationNeedsSecret ||
-    (SECRET.test(withoutWarnings) && /\b(?:in this reply|sa reply|sa among agent|sa aming agent)\b/iu.test(withoutWarnings));
-  const credentialForm = !secretDisclosure && SECRET.test(normalized) && ENTER.test(normalized)
-    && (urls.length > 0 || /\b(?:link|form|website|site|portal|claim|refund|reversal)\b/iu.test(normalized));
+  const organizationNeedsSecret = requestClauses.some((clause) =>
+    /\b(?:we|bank|team|namin|namo|kami)\b.{0,25}\b(?:need|needs|kailangan|kinahanglan)\b.{0,45}\b(?:otp|pin|password|cvv|code|login)\b|\b(?:kailangan|kinahanglan)\b.{0,20}\b(?:namin|namo)\b.{0,45}\b(?:otp|pin|password|cvv|code|login)\b/iu.test(clause));
+  const secretDisclosure = requestClauses.some((clause) =>
+    directRequest(clause, DISCLOSE, SECRET)
+    || (ACCOUNT_CODE_CONTEXT.test(clause) && directRequest(clause, DISCLOSE, /\bcode\b/iu))
+    || (SECRET.test(clause) && /\b(?:in this reply|sa reply|sa among agent|sa aming agent)\b/iu.test(clause)))
+    || organizationNeedsSecret;
+  const credentialForm = !secretDisclosure && clauses(normalized).some((clause) =>
+    SECRET.test(clause) && ENTER.test(clause)
+    && (/\b(?:link|form|website|site|portal|claim|refund|reversal)\b/iu.test(clause)
+      || matches(URL_PATTERN, clause).length > 0));
   add(secretDisclosure, 'CREDENTIAL_REQUEST', 'credentials', 55, 'Requests disclosure of a secret or verification code.');
   add(credentialForm, 'CREDENTIAL_FORM_REQUEST', 'credentials', 35, 'Directs a credential into a link or form.');
-  const identityRequest = near(/\b(?:send|share|submit|provide|upload|ibigay|ipadala|i-submit|ihatag)\b/iu,
-    /\b(?:personal id|valid id|id photo|identity document|government id)\b/iu, normalized);
+  const identityRequest = clauses(normalized).some((clause) => directRequest(clause,
+    /\b(?:send|share|submit|provide|upload|ibigay|ipadala|i-submit|ihatag)\b/iu,
+    /\b(?:personal id|valid id|id photo|identity document|government id)\b/iu));
   add(identityRequest, 'IDENTITY_DOCUMENT_REQUEST', 'credentials', 35, 'Requests a personal identity document.');
 
   const paymentAction = PAYMENT_VERB.test(normalized) && PAYMENT_OBJECT.test(normalized);
@@ -67,7 +92,11 @@ function analyzeRules(sms) {
   const personalPayment = paymentAction && personalDestination;
   const newNumberMoney = paymentAction && /\b(?:family member|relative|mama|mother|father|sister|brother)\b/iu.test(normalized)
     && /\bnew number\b/iu.test(normalized) && /\b(?:do not call|don't call|ayaw pagtawag)\b/iu.test(normalized);
+  const informalFamilyRequest = /\b(?:ma|mama|mom|mother|nanay|inay|papa|pa|dad|father|tatay|ate|kuya)\b/iu.test(normalized)
+    && /\b(?:new|bag[- ]?o(?:ng)?|bago(?:ng)?)\b.{0,30}\b(?:number|numero|sim)\b/iu.test(normalized)
+    && /\b(?:pahulam|pahiram|borrow|lend|send|padala)\b.{0,25}\b(?:kwarta|pera|money|cash)\b/iu.test(normalized);
   add(newNumberMoney, 'NEW_NUMBER_MONEY_REQUEST', 'payment', 35, 'Requests money from a claimed family member on a new number while discouraging contact.');
+  add(informalFamilyRequest, 'FAMILY_NEW_NUMBER_MONEY_REQUEST', 'payment', 35, 'Claims a family relationship from a new number while asking for money.');
   add(personalPayment, 'PERSONAL_PAYMENT_REQUEST', 'payment', 35, 'Requests payment to a personal or changed destination.');
   const giftCard = /\b(?:gift cards?|prepaid cards?)\b/iu.test(normalized)
     && /\b(?:buy|purchase|send|codes?|bilhin|bumili|ipalit|palit)\b/iu.test(normalized);
@@ -122,6 +151,8 @@ function analyzeRules(sms) {
   return {
     score, phraseScore, urlScore: cappedUrlScore,
     classification: score >= 60 ? 'SCAM' : score >= 30 ? 'SUSPICIOUS' : 'SAFE',
+    diagnosticCode: matchedIndicators.length === 0 ? 'NO_INDICATORS_MATCHED'
+      : score < 30 ? 'BELOW_WARNING_THRESHOLD' : 'INDICATORS_MATCHED',
     matchedIndicators,
     explanation: matchedIndicators.length ? matchedIndicators.map((item) => item.explanation).join(' ') : 'No configured scam indicators matched.',
     rulesVersion: VERSION,

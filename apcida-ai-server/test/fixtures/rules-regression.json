@@ -1,0 +1,20 @@
+[
+  { "id": "otp-notification", "sms": "Your OTP is 839201. Do not share it with anyone.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "cebuano-otp-request", "sms": "Ihatag imong OTP diri para ma-unlock ang imong account.", "proposedLabel": "SCAM", "expectedRules": "SUSPICIOUS", "expectedIndicator": "CREDENTIAL_REQUEST" },
+  { "id": "school-greeting", "sms": "Maayong buntag! Kita ta ugma sa school.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "informal-account-code", "sms": "Pa-send sa code nimo para ma-verify nako imong account.", "proposedLabel": "SCAM", "expectedRules": "SUSPICIOUS", "expectedIndicator": "CREDENTIAL_REQUEST" },
+  { "id": "family-new-number", "sms": "Hi Ma, bag-o ni akong number. Pwede ko pahulam kwarta?", "proposedLabel": "SUSPICIOUS", "expectedRules": "SUSPICIOUS", "expectedIndicator": "FAMILY_NEW_NUMBER_MONEY_REQUEST" },
+  { "id": "parcel-pickup", "sms": "Your parcel is ready for pickup at the branch.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "short-link-without-url", "sms": "Click this shortened link to update your details.", "proposedLabel": "SUSPICIOUS", "expectedRules": "SAFE" },
+  { "id": "cebuano-password-warning", "sms": "Ayaw ihatag imong password bisan kinsa.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "cross-sentence-password", "sms": "Please send the documents tomorrow. Your password is confidential. Never share your OTP.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "cross-sentence-otp", "sms": "Never share your OTP. Send your documents to our office.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "warning-before-real-request", "sms": "Never share codes. Send your OTP to us.", "proposedLabel": "SUSPICIOUS", "expectedRules": "SUSPICIOUS", "expectedIndicator": "CREDENTIAL_REQUEST" },
+  { "id": "cebuano-negated-request", "sms": "Ayaw jud ihatag imong OTP bisan kinsa.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "cebuano-negated-informal-request", "sms": "Ayaw pasend imong OTP bisan kinsa.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "filipino-negated-request", "sms": "Huwag ibigay ang OTP mo kahit kanino.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "informal-otp-request", "sms": "Paki-send po ang OTP mo para ma-verify ang account.", "proposedLabel": "SCAM", "expectedRules": "SUSPICIOUS", "expectedIndicator": "CREDENTIAL_REQUEST" },
+  { "id": "unrelated-class-code", "sms": "Pa-send sa class code para sa school activity.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "new-number-no-money", "sms": "Hi Ma, bag-o ni akong number. Kita ta ugma.", "proposedLabel": "SAFE", "expectedRules": "SAFE" },
+  { "id": "actual-short-url", "sms": "Click https://bit.ly/apcida-synthetic-example to update your details.", "proposedLabel": "SUSPICIOUS", "expectedRules": "SUSPICIOUS", "expectedIndicator": "OBSCURED_URL" }
+]
