@@ -39,6 +39,10 @@ function createProductionRepository(pool) {
           if (reportSchema.rows[0]?.table_name) {
             await client.query(`DELETE FROM production_reports WHERE installation_id = $1`, [installationId]);
           }
+          const studySchema = await client.query("SELECT to_regclass('study.participants') AS table_name");
+          if (studySchema.rows[0]?.table_name) {
+            await client.query('DELETE FROM study.participants WHERE installation_id = $1', [installationId]);
+          }
           await client.query(`DELETE FROM production_inference_requests WHERE installation_id = $1`, [installationId]);
           await client.query(`DELETE FROM production_rate_windows WHERE installation_id = $1`, [installationId]);
         }

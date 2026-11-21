@@ -25,6 +25,7 @@ test('revoking a phone blocks backend access before Cloudflare cleanup', async (
           }
           if (sql.startsWith('SELECT to_regclass')) return { rows: [{ table_name: 'production_reports' }] };
           if (sql.startsWith('DELETE FROM production_reports')) steps.push('reports deleted');
+          if (sql.startsWith('DELETE FROM study.participants')) steps.push('study contributions deleted');
           return { rowCount: 1 };
         },
         release() {},
@@ -38,7 +39,7 @@ test('revoking a phone blocks backend access before Cloudflare cleanup', async (
   const manager = createDeviceManagement(pool, cloudflare);
   assert.deepEqual(await manager.revoke(PHONE_ID), { found: true,
     cloudflareCleanupPending: false });
-  assert.deepEqual(steps, ['backend revoked', 'reports deleted',
+  assert.deepEqual(steps, ['backend revoked', 'reports deleted', 'study contributions deleted',
     'Cloudflare token removed', 'token cleanup recorded']);
 });
 

@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const { createProductionRepository, checkProductionRepository } = require('../src/production/repository');
 const { createPrivacyCodec } = require('../src/production/privacy');
 const { issueInstallationCredential } = require('../src/production/security');
+const { createStudyRepository } = require('../src/study/repository');
 
 const url = process.env.APCIDA_TEST_DATABASE_URL;
 const messageId = '6d5f9250-3a47-42a8-a06b-68f0b8a82691';
@@ -20,6 +21,8 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
         '../src/db/migrations/004_production_inference.sql'), 'utf8'));
       await pool.query(fs.readFileSync(path.join(__dirname,
         '../src/db/migrations/007_production_reports.sql'), 'utf8'));
+      await pool.query(fs.readFileSync(path.join(__dirname,
+        '../src/db/migrations/009_study_contributions.sql'), 'utf8'));
       await checkProductionRepository(pool);
       const repo = createProductionRepository(pool);
       const { tokenHash } = issueInstallationCredential();
@@ -116,7 +119,19 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
       assert.equal((await afterRestart.purge(3600)).requests, 2);
       assert.equal((await afterRestart.claim({ ...first,
         messageId: randomUUID(), leaseOwner: randomUUID() })).kind, 'CLAIMED');
+      const participantId = randomUUID();
+      const study = createStudyRepository(reopened, codec, { retentionDays: 365 });
+      const submittedAt = Date.now();
+      const contribution = await study.submit(installationId, { batchId: randomUUID(),
+        participantId, submittedAt, consentScope: 'STUDY_EVALUATION_ONLY',
+        examinedCount: 1, offeredCount: 1,
+        selectionMethod: 'RECENT_INBOX_PARTICIPANT_REVIEW',
+        items: [{ clientId: 'a'.repeat(64), text: 'Synthetic contribution for revocation',
+          localSuggestion: 'UNVERIFIED', reviewedCategory: 'SAFE', reviewedAt: submittedAt }] });
+      assert.equal(contribution.response.progress.totalAccepted, 1);
       assert.equal(await afterRestart.revoke(installationId), true);
+      assert.equal((await reopened.query('SELECT count(*)::integer AS total FROM study.participants WHERE installation_id = $1',
+        [installationId])).rows[0].total, 0);
       assert.equal((await reopened.query(`SELECT count(*)::integer AS total FROM production_reports
         WHERE installation_id = $1`, [installationId])).rows[0].total, 0);
       assert.ok((await afterRestart.findByTokenHash(tokenHash)).revokedAt);

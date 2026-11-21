@@ -25,6 +25,7 @@ GRANT USAGE ON SCHEMA study TO apcida_app, apcida_review;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA study TO apcida_app;
 GRANT USAGE ON SEQUENCE study.contributions_id_seq TO apcida_app;
 GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA study TO apcida_review;
+GRANT DELETE ON TABLE study.participants TO apcida_review;
 GRANT USAGE ON SEQUENCE study.contributions_id_seq TO apcida_review;
 GRANT SELECT, UPDATE ON TABLE public.production_inference_slot TO apcida_review;
 SQL
