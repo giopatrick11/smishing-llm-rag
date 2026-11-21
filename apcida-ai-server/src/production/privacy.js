@@ -14,6 +14,10 @@ function createPrivacyCodec(keyHex) {
     'apcida-production-request-v1', 32));
   const reportHmacKey = Buffer.from(hkdfSync('sha256', material, Buffer.alloc(0),
     'apcida-production-report-v1', 32));
+  const studyKey = Buffer.from(hkdfSync('sha256', material, Buffer.alloc(0),
+    'apcida-study-content-v1', 32));
+  const studyHmacKey = Buffer.from(hkdfSync('sha256', material, Buffer.alloc(0),
+    'apcida-study-hmac-v1', 32));
   const encryptWith = (key, value) => {
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', key, iv);
@@ -47,6 +51,11 @@ function createPrivacyCodec(keyHex) {
     decrypt(blob) { return decryptWith(encryptionKey, blob); },
     encryptReport(report) { return encryptWith(reportEncryptionKey, report); },
     decryptReport(blob) { return decryptWith(reportEncryptionKey, blob); },
+    studyHmac(value) {
+      return createHmac('sha256', studyHmacKey).update(value).digest('hex');
+    },
+    encryptStudy(value) { return encryptWith(studyKey, value); },
+    decryptStudy(blob) { return decryptWith(studyKey, blob); },
   };
 }
 

@@ -32,17 +32,19 @@ function constantTimePassword(supplied, expected) {
   return timingSafeEqual(a, b);
 }
 
-function page({ title, body, csrf = '', notice = '', active = '' }) {
-  const nav = csrf ? `<nav><a class="brand" href="/reports">ApCiDa <span>Review</span></a>
-    <div class="navlinks"><a class="${active === 'reports' ? 'selected' : ''}" href="/reports">Reports</a>
+function page({ title, body, csrf = '', notice = '', active = '', role = 'admin' }) {
+  const links = role === 'expert' ? `<a class="selected" href="/study">Study messages</a>` : `
+    <a class="${active === 'reports' ? 'selected' : ''}" href="/reports">Reports</a>
     <a class="${active === 'staged' ? 'selected' : ''}" href="/staged">RAG candidates</a>
     <a class="${active === 'active' ? 'selected' : ''}" href="/knowledge">Approved examples</a>
     <a class="${active === 'devices' ? 'selected' : ''}" href="/devices">Invites &amp; devices</a>
-    <form method="post" action="/logout"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button class="textbutton">Sign out</button></form></div></nav>` : '';
+    <a class="${active === 'study' ? 'selected' : ''}" href="/study">Thesis study</a>`;
+  const nav = csrf ? `<nav><a class="brand" href="${role === 'expert' ? '/study' : '/reports'}">ApCiDa <span>Review</span></a>
+    <div class="navlinks">${links}<form method="post" action="/logout"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button class="textbutton">Sign out</button></form></div></nav>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title>${escapeHtml(title)} · ApCiDa Review</title><link rel="stylesheet" href="/admin.css"></head><body>${nav}
     <main class="container">${notice ? `<p class="notice" role="status">${escapeHtml(notice)}</p>` : ''}${body}</main>
-    <footer>Private administrator workspace · Reports and RAG examples are separate records</footer></body></html>`;
+    <footer>Private ApCiDa workspace · Study contributions remain separate from reports and RAG</footer></body></html>`;
 }
 
 function header(eyebrow, title, description) {
@@ -60,9 +62,9 @@ function errorPage(res, csrf, message, status = 400) {
     body: `${header('Review workspace', 'Action unavailable', message)}<p><a href="/reports">Back to reports</a></p>` }));
 }
 
-function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
+function createAdminApp({ pool, codec, loginPassword, expertLoginPassword = null, embeddingService, corpus,
   publicHost = 'admin.apcida.stream', localPort = 3022, publicEnabled = false,
-  deviceManagement = null }) {
+  deviceManagement = null, studyRepository = null, studyWorker = null }) {
   if (!pool || !codec?.decryptReport || !embeddingService?.embed || !corpus?.sha256 ||
     typeof loginPassword !== 'string' || loginPassword.length < 32) {
     throw new Error('Admin dashboard configuration is incomplete');
@@ -111,10 +113,11 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
     return session;
   }
   app.get('/login', (req, res) => {
-    if (currentSession(req)) return res.redirect('/reports');
+    const current = currentSession(req);
+    if (current) return res.redirect(current.role === 'expert' ? '/study' : '/reports');
     res.send(page({ title: 'Sign in', body: `${header('Private dashboard', 'Review reports securely',
-      'Sign in with the administrator password stored on your Mac.')}
-      <form class="card login" method="post" action="/login"><label for="password">Administrator password</label>
+      'Sign in with your private administrator or study expert password.')}
+      <form class="card login" method="post" action="/login"><label for="password">Private password</label>
       <input id="password" name="password" type="password" required autocomplete="current-password" autofocus>
       <button class="primary">Sign in</button></form>` }));
   });
@@ -122,23 +125,32 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
     const now = Date.now();
     while (loginAttempts.length && loginAttempts[0] < now - LOGIN_WINDOW_MS) loginAttempts.shift();
     if (loginAttempts.length >= MAX_LOGIN_ATTEMPTS) return res.status(429).send('Too many attempts. Try again later.');
-    if (!constantTimePassword(req.body.password, loginPassword)) {
+    const isAdmin = constantTimePassword(req.body.password, loginPassword);
+    const isExpert = !isAdmin && expertLoginPassword &&
+      constantTimePassword(req.body.password, expertLoginPassword);
+    if (!isAdmin && !isExpert) {
       loginAttempts.push(now);
       return res.status(401).send(page({ title: 'Sign in', body: `${header('Private dashboard', 'Sign in failed',
         'Check the administrator password and try again.')}<p><a href="/login">Return to sign in</a></p>` }));
     }
     loginAttempts.length = 0;
     const token = randomBytes(32).toString('hex');
-    sessions.set(token, { csrf: randomBytes(32).toString('hex'), expires: now + SESSION_MS });
+    sessions.set(token, { csrf: randomBytes(32).toString('hex'), expires: now + SESSION_MS,
+      role: isExpert ? 'expert' : 'admin' });
     res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'strict', secure: req.headers.host === publicHost,
       maxAge: SESSION_MS, path: '/' });
-    res.redirect(303, '/reports');
+    res.redirect(303, isExpert ? '/study' : '/reports');
   });
   app.use((req, res, next) => {
     const session = currentSession(req);
     if (!session) return res.redirect(303, '/login');
     req.adminSession = session;
     if (req.method === 'POST' && req.body.csrf !== session.csrf) return res.status(403).end();
+    if (session.role === 'expert' && !(req.method === 'POST' && req.path === '/logout') &&
+      !(req.method === 'GET' && (req.path === '/study' || /^\/study\/\d+$/u.test(req.path))) &&
+      !(req.method === 'POST' && /^\/study\/\d+\/label$/u.test(req.path))) {
+      return res.status(403).end();
+    }
     next();
   });
   app.post('/logout', (req, res) => {
@@ -237,6 +249,128 @@ function createAdminApp({ pool, codec, loginPassword, embeddingService, corpus,
           'Backend access is revoked. Cloudflare token removal is pending; retry from the devices page.', 503);
       }
       res.redirect(303, '/devices');
+    });
+  }
+  if (studyRepository && studyWorker) {
+    app.get('/study', async (req, res) => {
+      const expert = req.adminSession.role === 'expert';
+      const pageNumber = /^[1-9]\d{0,3}$/u.test(req.query.page || '1') ? Number(req.query.page || 1) : 1;
+      const [rows, stats] = await Promise.all([studyRepository.list(pageNumber), studyRepository.stats()]);
+      const entries = rows.map((row) => `<tr><td><a href="/study/${row.id}">#${row.id}</a></td>
+        <td>${date(row.created_at)}</td><td>${expert ? badge('BLIND REVIEW') : badge(row.excluded_at ? 'EXCLUDED' : row.prediction_status || 'NOT QUEUED')}</td>
+        <td>${expert ? (row.expert_label ? badge('LABELED') : badge('AWAITING REVIEW'))
+          : row.expert_label ? badge(row.expert_label) : badge('AWAITING REVIEW')}</td></tr>`).join('');
+      const action = expert ? '' : `<form method="post" action="/study/analyze-next" class="actions">
+        <input type="hidden" name="csrf" value="${req.adminSession.csrf}">
+        <button class="primary">Analyze next 10</button><a href="/study/results">View comparison</a></form>`;
+      const pages = `<p class="pager">Page ${pageNumber} · ${pageNumber > 1 ? `<a href="/study?page=${pageNumber - 1}">Previous</a>` : ''}
+        ${rows.length === 50 ? `<a href="/study?page=${pageNumber + 1}">Next</a>` : ''}</p>`;
+      const notice = /^[0-9]{1,2}$/u.test(req.query.queued || '')
+        ? `${req.query.queued} contributions queued for sequential analysis.` : '';
+      res.send(page({ title: 'Thesis study', csrf: req.adminSession.csrf, notice,
+        role: req.adminSession.role, active: 'study',
+        body: `${header('Thesis study', expert ? 'Blind expert review' : 'Consented contributions',
+          expert ? 'Label each SMS using only the evidence shown. Model results remain hidden here.'
+            : 'Contributions are separate from detection reports and live RAG knowledge.')}
+          <section class="card"><h2>Progress</h2><p>${expert
+            ? `${stats.total} eligible contributions · ${stats.expert_labeled} expert labeled`
+            : `${stats.total}/200 eligible contributions toward the study target · ${stats.excluded || 0} excluded · ${stats.completed} analyzed · ${stats.errors} analysis errors · ${stats.expert_labeled} expert labeled`}</p>
+          ${expert ? '' : `<p>Recorded scan totals: ${stats.examined} examined · ${stats.offered} offered · ${stats.selected} selected. Repeated scans can include the same inbox message.</p>`}${action}</section>
+          <section class="card"><div class="tablewrap"><table><thead><tr><th>ID</th><th>Received</th><th>Analysis</th><th>Expert review</th></tr></thead>
+          <tbody>${entries || '<tr><td colspan="4">No contributions received yet.</td></tr>'}</tbody></table></div>${pages}</section>` }));
+    });
+    app.post('/study/analyze-next', async (req, res) => {
+      try {
+        const ids = await studyWorker.queueNext();
+        res.redirect(303, `/study?queued=${ids.length}`);
+      } catch {
+        errorPage(res, req.adminSession.csrf,
+          'Analysis could not be queued. Check the study snapshot, database, and local model.', 503);
+      }
+    });
+    app.get('/study/results', async (req, res) => {
+      const rows = await studyRepository.comparison();
+      const count = (truth, predicted) => rows.filter((row) => row.expert_label === truth &&
+        row.status === 'COMPLETED' && row.classification === predicted)
+        .reduce((sum, row) => sum + row.total, 0);
+      const finalized = rows.filter((row) => ['SCAM', 'SAFE'].includes(row.expert_label) &&
+        ['COMPLETED', 'ERROR'].includes(row.status));
+      const errors = finalized.filter((row) => row.status === 'ERROR')
+        .reduce((sum, row) => sum + row.total, 0);
+      const verified = finalized
+        .reduce((sum, row) => sum + row.total, 0);
+      const completed = verified - errors;
+      const correct = count('SCAM', 'SCAM') + count('SAFE', 'SAFE');
+      const matrix = ['SCAM', 'SAFE'].map((truth) => `<tr><th>${truth}</th>${['SCAM', 'SUSPICIOUS', 'SAFE']
+        .map((predicted) => `<td>${count(truth, predicted)}</td>`).join('')}
+        <td>${finalized.filter((row) => row.expert_label === truth && row.status === 'ERROR')
+          .reduce((sum, row) => sum + row.total, 0)}</td></tr>`).join('');
+      const accuracy = completed ? `${(100 * correct / completed).toFixed(1)}%` : '—';
+      const endToEnd = verified ? `${(100 * correct / verified).toFixed(1)}%` : '—';
+      res.send(page({ title: 'Study comparison', csrf: req.adminSession.csrf, active: 'study',
+        body: `${header('Thesis study / Comparison', 'Expert versus system',
+          'Only independently expert-labeled contributions count. SUSPICIOUS and errors are reported separately.')}
+          <section class="card"><h2>Exact results</h2><p>Classification accuracy: ${correct}/${completed} exact SCAM/SAFE matches (${accuracy}) among completed, expert-labeled messages. End-to-end exact-match rate: ${correct}/${verified} (${endToEnd}) when ${errors} analysis errors are included. Queued or running items are outside these denominators.</p>
+          <div class="tablewrap"><table><thead><tr><th>Expert label</th><th>System SCAM</th><th>System SUSPICIOUS</th><th>System SAFE</th><th>Error</th></tr></thead><tbody>${matrix}</tbody></table></div>
+          <p>This self-selected, consented set does not estimate accuracy across all incoming SMS. SUSPICIOUS outcomes are shown separately in the table.</p>
+          <p><a href="/study/results.csv">Download text-free results CSV</a></p></section>
+          <p><a href="/study">Back to contributions</a></p>` }));
+    });
+    app.get('/study/results.csv', async (req, res) => {
+      const columns = ['id', 'participant_id', 'local_suggestion', 'participant_label', 'created_at',
+        'status', 'classification', 'confidence', 'error_code', 'model_name', 'model_digest',
+        'pipeline_sha256', 'knowledge_sha256', 'expert_label', 'reviewer', 'expert_reviewed_at'];
+      const csv = (value) => {
+        const raw = String(value instanceof Date ? value.toISOString() : value ?? '');
+        const safe = /^[=+@-]/u.test(raw) ? `'${raw}` : raw;
+        return `"${safe.replaceAll('"', '""')}"`;
+      };
+      const rows = await studyRepository.exportRows();
+      res.set({ 'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="apcida-study-results.csv"' });
+      res.send([columns.join(','), ...rows.map((row) => columns.map((column) => csv(row[column])).join(','))]
+        .join('\n') + '\n');
+    });
+    app.get('/study/:id', async (req, res) => {
+      if (!ID.test(req.params.id)) return errorPage(res, req.adminSession.csrf, 'Invalid study ID.');
+      const entry = await studyRepository.get(req.params.id);
+      if (!entry) return errorPage(res, req.adminSession.csrf, 'Study message not found.', 404);
+      const expert = req.adminSession.role === 'expert';
+      const form = entry.expert_label ? `<p>Expert label: ${badge(entry.expert_label)} · ${date(entry.expert_reviewed_at)}</p>`
+        : entry.excluded_at ? '<p>This message is excluded from the accuracy comparison.</p>'
+          : !expert ? '<p>Awaiting independent expert review.</p>'
+        : `<form method="post" action="/study/${entry.id}/label" class="stack">
+          <input type="hidden" name="csrf" value="${req.adminSession.csrf}">
+          <label for="label">Independent expert decision</label>
+          <select id="label" name="label" required><option value="">Choose a label</option>
+          <option value="SCAM">Scam</option><option value="SAFE">Safe</option>
+          <option value="INSUFFICIENT_EVIDENCE">Insufficient evidence</option></select>
+          <label for="reviewer">Reviewer name</label><input id="reviewer" name="reviewer" maxlength="100" required>
+          <button class="primary">Save expert label</button></form>`;
+      const prediction = expert || !entry.expert_label ? '' : `<section class="card"><h2>System result</h2>
+        <p>${entry.prediction_status === 'COMPLETED' ? badge(entry.classification)
+          : badge(entry.prediction_status || 'NOT QUEUED')}</p>
+        <p>Model: ${escapeHtml(entry.model_name || '—')} · Confidence: ${escapeHtml(entry.confidence || '—')}
+        · Error: ${escapeHtml(entry.error_code || '—')}</p></section>`;
+      res.send(page({ title: `Study message ${entry.id}`, csrf: req.adminSession.csrf,
+        role: req.adminSession.role, active: 'study',
+        body: `<p><a href="/study">Back to contributions</a></p>${header('Thesis study / Review', `Message #${entry.id}`,
+          'Judge the visible text; sender identity and link destinations are not independently verified.')}
+          <section class="card"><h2>Consented SMS text</h2><p class="sms">${escapeHtml(entry.text)}</p></section>
+          <section class="card"><h2>Expert review</h2>${form}</section>${prediction}` }));
+    });
+    app.post('/study/:id/label', async (req, res) => {
+      if (req.adminSession.role !== 'expert') return res.status(403).end();
+      const label = req.body.label;
+      const reviewer = typeof req.body.reviewer === 'string' ? req.body.reviewer.trim() : '';
+      if (!ID.test(req.params.id) || !['SCAM', 'SAFE', 'INSUFFICIENT_EVIDENCE'].includes(label) ||
+        !reviewer || reviewer.length > 100) {
+        return errorPage(res, req.adminSession.csrf, 'Invalid expert label.');
+      }
+      if (!await studyRepository.label(req.params.id, label, reviewer)) {
+        return errorPage(res, req.adminSession.csrf, 'This message is unavailable or already labeled.', 409);
+      }
+      res.redirect(303, `/study/${req.params.id}`);
     });
   }
   app.get('/reports', async (req, res) => {

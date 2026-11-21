@@ -84,7 +84,7 @@ test('analysis sends a schema-constrained chat request and returns validated dat
     assert.deepEqual(body.format.required, ['classification', 'confidence', 'rationale']);
     assert.equal(body.format.additionalProperties, false);
     assert.match(body.messages[0].content, /Filipino, or Cebuano/);
-    assert.match(body.messages[0].content, /OTP, urgency, or an unfamiliar URL alone does not make a message a scam/);
+    assert.match(body.messages[0].content, /An OTP notification, urgency, or an unfamiliar URL alone does not make a message a scam/);
     assert.deepEqual(JSON.parse(body.messages[1].content), {
       sender: sms.sender, text: sms.text, receivedAt: sms.receivedAt,
     });

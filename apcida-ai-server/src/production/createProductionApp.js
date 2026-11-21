@@ -8,6 +8,7 @@ const { createInstallationAuth } = require('./security');
 const { validateProductionRequest, validateProductionResponse } = require('./smsContract');
 const { startAnalysisDeadline } = require('./deadline');
 const { validateReport } = require('./reportContract');
+const { validateBatch, UUID: STUDY_UUID } = require('../study/contract');
 
 function assertProductionConfig(config) {
   if (config.model !== 'gemma3:12b' || !config.ragEnabled || !config.rulesEnabled
@@ -24,7 +25,7 @@ function createAnalysisService(config, knowledgeRepository, fetchImpl) {
 
 function createProductionApp(config, { repository, codec, knowledgeRepository, fetchImpl,
   analysisService, inviteEnrollment, scheduleInviteCleanup, audit = () => {}, rateLimit = 10, leaseSeconds = 300,
-  retentionSeconds = 86400, deadlineMs = 90000 } = {}) {
+  retentionSeconds = 86400, deadlineMs = 90000, studyRepository = null } = {}) {
   assertProductionConfig(config);
   if (!repository || !['findByTokenHash', 'isActive', 'revoke', 'countRequest', 'claim', 'complete', 'release',
     'acquireSlot', 'releaseSlot', 'submitReport']
@@ -109,6 +110,35 @@ function createProductionApp(config, { repository, codec, knowledgeRepository, f
           return res.status(503).json({ error: 'RENEWAL_UNAVAILABLE' });
         }
       });
+  }
+  if (studyRepository) {
+    app.get('/api/v1/community/contributions/progress', auth, async (req, res) => {
+      if (!STUDY_UUID.test(req.query.participantId || '')) {
+        return res.status(400).json({ error: 'INVALID_REQUEST' });
+      }
+      try {
+        const progress = await studyRepository.progress(res.locals.installationId,
+          req.query.participantId.toLowerCase());
+        return progress ? res.json(progress) : res.status(403).json({ error: 'PARTICIPANT_CONFLICT' });
+      } catch { return res.status(503).json({ error: 'STUDY_UNAVAILABLE' }); }
+    });
+    app.post('/api/v1/community/contributions', createRateLimiter({ limit: 5 }), auth,
+      express.json({ limit: '64kb', strict: true }), async (req, res) => {
+        const batch = validateBatch(req.body);
+        if (!batch) return res.status(400).json({ error: 'INVALID_REQUEST' });
+        try {
+          const result = await studyRepository.submit(res.locals.installationId, batch);
+          if (result.kind === 'ACCEPTED') return res.status(200).json(result.response);
+          if (result.kind === 'CONFLICT') return res.status(409).json({ error: 'BATCH_CONFLICT' });
+          return res.status(403).json({ error: 'PARTICIPANT_CONFLICT' });
+        } catch { return res.status(503).json({ error: 'STUDY_UNAVAILABLE' }); }
+      });
+    app.delete('/api/v1/community/contributions', auth, async (req, res) => {
+      try {
+        await studyRepository.withdraw(res.locals.installationId);
+        return res.status(204).end();
+      } catch { return res.status(503).json({ error: 'STUDY_UNAVAILABLE' }); }
+    });
   }
   app.post('/api/v1/reports', createRateLimiter({ limit: 10 }), auth,
     express.json({ limit: '32kb', strict: true }), async (req, res) => {

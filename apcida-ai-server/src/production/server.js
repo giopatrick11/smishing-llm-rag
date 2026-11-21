@@ -3,6 +3,7 @@ const { createDatabasePool, checkRagDatabase } = require('../db/pool');
 const { createKnowledgeRepository } = require('../db/knowledgeRepository');
 const { createProductionRepository, checkProductionRepository } = require('./repository');
 const { createPrivacyCodec } = require('./privacy');
+const { createStudyRepository } = require('../study/repository');
 const { assertProductionConfig, createProductionApp } = require('./createProductionApp');
 const { createInviteRepository, createCloudflareTokenClient,
   redeemInvite, renewInstallation, cleanupCloudflareTokens } = require('./inviteEnrollment');
@@ -52,6 +53,18 @@ async function main(env = process.env) {
     await checkRagDatabase(pool);
     await checkProductionRepository(pool);
     const repository = createProductionRepository(pool);
+    const studyEnabled = env.APCIDA_STUDY_ENABLED === 'true';
+    if (studyEnabled) {
+      const schema = await pool.query("SELECT to_regclass('study.contributions') AS table_name");
+      if (!schema.rows[0]?.table_name) throw new Error('Study schema unavailable');
+    }
+    const studyRetentionDays = Number(env.APCIDA_STUDY_RETENTION_DAYS);
+    if (studyEnabled && (!Number.isInteger(studyRetentionDays) ||
+      studyRetentionDays < 1 || studyRetentionDays > 3650)) {
+      throw new Error('APCIDA_STUDY_RETENTION_DAYS must be set to 1-3650');
+    }
+    const studyRepository = studyEnabled ? createStudyRepository(pool, settings.codec,
+      { retentionDays: studyRetentionDays }) : null;
     let inviteEnrollment;
     let inviteCleanup;
     let inviteRepository;
@@ -68,6 +81,7 @@ async function main(env = process.env) {
     }
     const purge = async () => {
       await repository.purge(settings.retentionSeconds);
+      if (studyRepository) await studyRepository.purgeExpired();
       let cleanupSafe = true;
       if (inviteEnrollment) {
         await inviteRepository.purge();
@@ -89,7 +103,7 @@ async function main(env = process.env) {
       knowledgeRepository: createKnowledgeRepository(pool), inviteEnrollment,
       scheduleInviteCleanup: inviteCleanup, audit,
       retentionSeconds: settings.retentionSeconds, rateLimit: settings.rateLimit,
-      deadlineMs: settings.deadlineMs });
+      deadlineMs: settings.deadlineMs, studyRepository });
     const server = app.listen(settings.port, '127.0.0.1', () => {
       process.stdout.write(`Controlled production test listener bound to 127.0.0.1:${settings.port}\n`);
     });

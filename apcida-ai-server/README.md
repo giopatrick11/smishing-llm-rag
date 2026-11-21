@@ -162,7 +162,7 @@ cd /Users/giopatrick/smishing-llm-rag/apcida-ai-server
 npm test
 ```
 
-The automated tests mock Ollama and open a temporary local HTTP port. Ollama does not need to be running for them. The API handles one message per request. Community contributions, user reports, batch learning, and phone connectivity are outside this phase.
+The automated tests mock Ollama and open a temporary local HTTP port. Ollama does not need to be running for them. The development API handles one message per request. The separate opt-in controlled listener's thesis contribution workflow is documented in [STUDY_CONTRIBUTIONS.md](STUDY_CONTRIBUTIONS.md).
 
 ## Phase 2A: baseline evaluation
 
@@ -221,7 +221,7 @@ The migration is safe to rerun. It enables pgvector and creates an **empty** `ra
 
 To enable retrieval after migrating, set `RAG_ENABLED=true` in `.env` and restart `npm start`. On startup, the server checks for PostgreSQL 17, pgvector, and the migrated table. For each authorized SMS analysis request, it sends the SMS text to local Ollama `/api/embed` using `nomic-embed-text`, searches up to three active knowledge entries with cosine similarity of at least 0.72, and passes any matches as untrusted reference context to `gemma3:12b`. The incoming SMS and its embedding are not written to PostgreSQL. With an empty knowledge table, there are no retrieved examples and the baseline prompt is used. If embedding or database retrieval fails while RAG is enabled, the request returns an error rather than silently claiming to have used RAG.
 
-There is no public contribution endpoint. The local administrator workflow below is the only application path for knowledge ingestion. `GET /api/ai/status` still reports the Gemma classification model; it does not test PostgreSQL or the embedding model.
+The development API has no contribution endpoint. The opt-in controlled listener can receive consented thesis contributions separately from RAG; see [STUDY_CONTRIBUTIONS.md](STUDY_CONTRIBUTIONS.md). The local administrator workflow below remains the only application path for knowledge ingestion. `GET /api/ai/status` still reports the Gemma classification model; it does not test PostgreSQL or the embedding model.
 
 ## Phase 2C: reviewed knowledge ingestion
 
