@@ -11,6 +11,10 @@ coverage/
 *.log
 /evaluation-results/
 
+# Thesis manuscript source files (audit Markdown reports remain trackable)
+**/Manuscript - ApCiDa*.pdf
+**/Manuscript - ApCiDa*.docx
+
 # macOS and editor files
 .DS_Store
 *.swp
