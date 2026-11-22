@@ -15,7 +15,7 @@ const batch = () => ({ batchId: randomUUID(), participantId, submittedAt: Date.n
   consentScope: 'STUDY_EVALUATION_ONLY', examinedCount: 1, offeredCount: 1,
   selectionMethod: 'RECENT_INBOX_PARTICIPANT_REVIEW',
   items: [{ clientId, text: 'Ordinary appointment reminder',
-    localSuggestion: 'UNVERIFIED', reviewedCategory: 'SAFE', reviewedAt: Date.now() - 1000 }] });
+    localSuggestion: 'UNVERIFIED', reviewedAt: Date.now() - 1000 }] });
 
 function request(base, pathname, { method = 'GET', headers = {}, body = null } = {}) {
   return new Promise((resolve, reject) => {
@@ -39,13 +39,13 @@ async function withServer(app, run) {
   } finally { await new Promise((resolve) => server.close(resolve)); }
 }
 
-test('study batch requires explicit scope, reviewed label, and redacted text', () => {
+test('study batch requires explicit scope, reviewed text, and no participant label', () => {
   const valid = batch();
   assert.deepEqual(validateBatch(valid), valid);
   assert.equal(validateBatch({ ...valid, consentScope: 'REVIEW_AND_RAG_CANDIDATE' }), null);
   assert.equal(validateBatch({ ...valid, items: [{ ...valid.items[0], sender: 'private' }] }), null);
   assert.equal(validateBatch({ ...valid, items: [{ ...valid.items[0], text: 'Your code is 123456' }] }), null);
-  assert.equal(validateBatch({ ...valid, items: [{ ...valid.items[0], reviewedCategory: 'UNVERIFIED' }] }), null);
+  assert.equal(validateBatch({ ...valid, items: [{ ...valid.items[0], reviewedCategory: 'SAFE' }] }), null);
   assert.equal(validateBatch({ ...valid, items: Array(21).fill(valid.items[0]) }), null);
 });
 
@@ -62,10 +62,10 @@ test('contribution upload stores a batch without invoking SMS inference', async 
   const codec = createPrivacyCodec('13'.repeat(32));
   const calls = [];
   const studyRepository = {
-    progress: async () => ({ scamAccepted: 0, safeAccepted: 0, totalAccepted: 0 }),
+    progress: async () => ({ totalAccepted: 0 }),
     submit: async (id, value) => { calls.push([id, value]); return { kind: 'ACCEPTED', response: {
       acceptedClientIds: [clientId], rejectedClientIds: [],
-      progress: { scamAccepted: 0, safeAccepted: 1, totalAccepted: 1 },
+      progress: { totalAccepted: 1 },
     } }; },
     withdraw: async (id) => { calls.push(['withdraw', id]); },
   };
@@ -160,6 +160,7 @@ test('expert role cannot see predictions or queue analysis before independent la
     const exported = await request(base, '/study/results.csv', { headers: { cookie: adminLogin.cookie } });
     assert.equal(exported.status, 200);
     assert.doesNotMatch(exported.body, /private|<script>/u);
+    assert.doesNotMatch(exported.body, /participant_label/u);
     assert.match(exported.body, /'=HYPERLINK/u);
   });
 });

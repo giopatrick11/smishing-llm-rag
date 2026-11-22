@@ -1,10 +1,10 @@
 # Consented thesis contributions
 
-The study workflow is separate from detection reports and RAG knowledge. It is disabled by default. Adding this source does not migrate a live database or deploy the website. Participants review and select messages on the phone. The private dashboard queues up to ten received messages per click; the worker processes one at a time under the existing global inference slot. The expert uses a separate password and sees message text without the participant label or model result until a label is saved.
+The study workflow is separate from detection reports and RAG knowledge. Participants review and select messages on the phone without assigning Scam or Safe labels. The private dashboard queues up to ten received messages per click; the worker processes one at a time under the existing global inference slot. The expert uses a separate password and sees message text without the model result until a label is saved.
 
 ## Storage and privacy
 
-Migration `009_study_contributions.sql` creates a `study` schema: `participants`, `withdrawals`, `batches`, `contributions`, `predictions`, and `expert_labels`. SMS text is encrypted with a study-specific key derived from `PRODUCTION_DATA_KEY`; an HMAC supports duplicate checks without plaintext indexes. Phone identifiers are not included in the contribution. Submitted `clientId` values are keyed fingerprints made on the phone. The batch records how many SMS were examined, offered, and selected; it does not store declined SMS text. A participant can withdraw through `DELETE /api/v1/community/contributions`, which deletes their study rows and records a withdrawal timestamp so an old queued upload cannot recreate them. Revoking the phone credential also deletes study rows through the installation foreign key.
+Migration `009_study_contributions.sql` creates a `study` schema: `participants`, `withdrawals`, `batches`, `contributions`, `predictions`, and `expert_labels`. Migration `010_unlabeled_study_contributions.sql` preserves earlier participant labels as a legacy audit field but makes new messages unlabeled until expert review. SMS text is encrypted with a study-specific key derived from `PRODUCTION_DATA_KEY`; an HMAC supports duplicate checks without plaintext indexes. Phone identifiers are not included in the contribution. Submitted `clientId` values are keyed fingerprints made on the phone. The batch records how many SMS were examined, offered, and selected; it does not store declined SMS text. A participant can withdraw through `DELETE /api/v1/community/contributions`, which deletes their study rows and records a withdrawal timestamp so an old queued upload cannot recreate them. Revoking the phone credential also deletes study rows.
 
 Set `APCIDA_STUDY_RETENTION_DAYS` explicitly before enabling the service. The production listener purges expired participant records and all dependent study rows hourly. Review the period, backup retention, deletion procedure, consent wording, and expert access with the study owner before setting it. The study data never enters `rag_knowledge` automatically.
 
@@ -12,11 +12,11 @@ Set `APCIDA_STUDY_RETENTION_DAYS` explicitly before enabling the service. The pr
 
 The controlled phone listener uses the existing installation Bearer credential and Cloudflare Access service token. `APCIDA_STUDY_ENABLED=true` mounts:
 
-- `GET /api/v1/community/contributions/progress?participantId=UUID`: accepted counts for the authenticated installation.
+- `GET /api/v1/community/contributions/progress?participantId=UUID`: accepted total for the authenticated installation.
 - `POST /api/v1/community/contributions`: one explicit consented batch of 1–20 edited SMS. It commits accepted and rejected item decisions before responding. The participant cap is 40 total, enforced transactionally. Replaying the same batch ID and content returns the saved response.
 - `DELETE /api/v1/community/contributions`: withdraws all study records for that installation.
 
-Batch JSON contains `batchId`, `participantId`, `submittedAt`, `consentScope: "STUDY_EVALUATION_ONLY"`, `examinedCount`, `offeredCount`, `selectionMethod: "RECENT_INBOX_PARTICIPANT_REVIEW"`, and `items`. Each item has a keyed `clientId`, edited `text`, `localSuggestion`, participant `reviewedCategory`, and `reviewedAt`. The participant category is a study input, not ground truth. The server requires the participant ID to stay bound to the authenticated installation and rejects obvious unredacted numeric codes and email addresses. Manual review remains necessary for names and other personal details.
+Batch JSON contains `batchId`, `participantId`, `submittedAt`, `consentScope: "STUDY_EVALUATION_ONLY"`, `examinedCount`, `offeredCount`, `selectionMethod: "RECENT_INBOX_PARTICIPANT_REVIEW"`, and `items`. Each item has a keyed `clientId`, edited `text`, `localSuggestion`, and `reviewedAt`. The server requires the participant ID to stay bound to the authenticated installation and rejects obvious unredacted numeric codes and email addresses. Manual review remains necessary for names and other personal details.
 
 ## Dashboard and analysis
 

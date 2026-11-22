@@ -1,7 +1,6 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const HASH = /^[0-9a-f]{64}$/iu;
 const SUGGESTIONS = new Set(['SCAM', 'SAFE', 'SUSPICIOUS', 'UNVERIFIED']);
-const LABELS = new Set(['SCAM', 'SAFE']);
 const MAX_ITEMS = 20;
 
 function exactKeys(value, keys) {
@@ -25,18 +24,17 @@ function validateBatch(body) {
   const seen = new Set();
   const items = [];
   for (const item of body.items) {
-    if (!exactKeys(item, ['clientId', 'text', 'localSuggestion', 'reviewedCategory', 'reviewedAt']) ||
+    if (!exactKeys(item, ['clientId', 'text', 'localSuggestion', 'reviewedAt']) ||
       !HASH.test(item.clientId) || seen.has(item.clientId.toLowerCase()) ||
       typeof item.text !== 'string' || item.text.trim() !== item.text ||
       item.text.length < 1 || item.text.length > 2000 ||
       /(?<!\d)\d{4,8}(?!\d)|(?<!\d)\d{9,}(?!\d)|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu.test(item.text) ||
-      !SUGGESTIONS.has(item.localSuggestion) || !LABELS.has(item.reviewedCategory) ||
+      !SUGGESTIONS.has(item.localSuggestion) ||
       !Number.isSafeInteger(item.reviewedAt) || item.reviewedAt > body.submittedAt ||
       item.reviewedAt < body.submittedAt - 30 * 86400000) return null;
     seen.add(item.clientId.toLowerCase());
     items.push({ clientId: item.clientId.toLowerCase(), text: item.text,
-      localSuggestion: item.localSuggestion, reviewedCategory: item.reviewedCategory,
-      reviewedAt: item.reviewedAt });
+      localSuggestion: item.localSuggestion, reviewedAt: item.reviewedAt });
   }
   return { batchId: body.batchId.toLowerCase(), participantId: body.participantId.toLowerCase(),
     submittedAt: body.submittedAt, consentScope: body.consentScope,

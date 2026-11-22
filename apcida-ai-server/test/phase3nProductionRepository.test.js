@@ -23,6 +23,8 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
         '../src/db/migrations/007_production_reports.sql'), 'utf8'));
       await pool.query(fs.readFileSync(path.join(__dirname,
         '../src/db/migrations/009_study_contributions.sql'), 'utf8'));
+      await pool.query(fs.readFileSync(path.join(__dirname,
+        '../src/db/migrations/010_unlabeled_study_contributions.sql'), 'utf8'));
       await checkProductionRepository(pool);
       const repo = createProductionRepository(pool);
       const { tokenHash } = issueInstallationCredential();
@@ -127,7 +129,7 @@ test('isolated PostgreSQL repository persists claims, encrypted replay, rate lim
         examinedCount: 1, offeredCount: 1,
         selectionMethod: 'RECENT_INBOX_PARTICIPANT_REVIEW',
         items: [{ clientId: 'a'.repeat(64), text: 'Synthetic contribution for revocation',
-          localSuggestion: 'UNVERIFIED', reviewedCategory: 'SAFE', reviewedAt: submittedAt }] });
+          localSuggestion: 'UNVERIFIED', reviewedAt: submittedAt }] });
       assert.equal(contribution.response.progress.totalAccepted, 1);
       assert.equal(await afterRestart.revoke(installationId), true);
       assert.equal((await reopened.query('SELECT count(*)::integer AS total FROM study.participants WHERE installation_id = $1',

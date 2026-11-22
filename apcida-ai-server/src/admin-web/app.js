@@ -317,7 +317,7 @@ function createAdminApp({ pool, codec, loginPassword, expertLoginPassword = null
           <p><a href="/study">Back to contributions</a></p>` }));
     });
     app.get('/study/results.csv', async (req, res) => {
-      const columns = ['id', 'participant_id', 'local_suggestion', 'participant_label', 'created_at',
+      const columns = ['id', 'participant_id', 'local_suggestion', 'created_at',
         'status', 'classification', 'confidence', 'error_code', 'model_name', 'model_digest',
         'pipeline_sha256', 'knowledge_sha256', 'expert_label', 'reviewer', 'expert_reviewed_at'];
       const csv = (value) => {

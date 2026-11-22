@@ -5,21 +5,14 @@ function createStudyRepository(pool, codec, { retentionDays = 365 } = {}) {
   if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650) {
     throw new TypeError('Study retention must be 1-3650 days');
   }
-  const progressSql = `SELECT c.participant_label, count(*)::integer AS total
+  const progressSql = `SELECT count(*)::integer AS total
     FROM study.contributions c JOIN study.participants p USING (participant_id)
-    WHERE p.installation_id = $1 AND p.participant_id = $2
-    GROUP BY c.participant_label`;
+    WHERE p.installation_id = $1 AND p.participant_id = $2`;
   async function progress(installationId, participantId, query = pool) {
     const owner = await query.query('SELECT installation_id FROM study.participants WHERE participant_id = $1', [participantId]);
     if (owner.rowCount && owner.rows[0].installation_id !== installationId) return null;
     const result = await query.query(progressSql, [installationId, participantId]);
-    const counts = { scamAccepted: 0, safeAccepted: 0, totalAccepted: 0 };
-    for (const row of result.rows) {
-      if (row.participant_label === 'SCAM') counts.scamAccepted = row.total;
-      if (row.participant_label === 'SAFE') counts.safeAccepted = row.total;
-    }
-    counts.totalAccepted = counts.scamAccepted + counts.safeAccepted;
-    return counts;
+    return { totalAccepted: result.rows[0].total };
   }
 
   return {
@@ -63,14 +56,13 @@ function createStudyRepository(pool, codec, { retentionDays = 365 } = {}) {
         for (const item of batch.items) {
           const normalized = item.text.toLowerCase().replace(/\s+/gu, ' ');
           const contentHmac = codec.studyHmac(normalized);
-          const existing = await client.query(`SELECT client_id, content_hmac, participant_label
+          const existing = await client.query(`SELECT client_id, content_hmac
             FROM study.contributions
             WHERE participant_id = $1 AND (client_id = $2 OR content_hmac = $3) LIMIT 1`,
           [batch.participantId, item.clientId, contentHmac]);
           if (existing.rowCount) {
             if (existing.rows[0].client_id === item.clientId &&
-              existing.rows[0].content_hmac === contentHmac &&
-              existing.rows[0].participant_label === item.reviewedCategory) {
+              existing.rows[0].content_hmac === contentHmac) {
               acceptedClientIds.push(item.clientId);
             } else rejectedClientIds.push(item.clientId);
             continue;
@@ -78,14 +70,12 @@ function createStudyRepository(pool, codec, { retentionDays = 365 } = {}) {
           if (counts.totalAccepted >= 40) { rejectedClientIds.push(item.clientId); continue; }
           await client.query(`INSERT INTO study.contributions
             (participant_id, client_id, content_hmac, content_encrypted, local_suggestion,
-             participant_label, reviewed_at) VALUES ($1, $2, $3, $4, $5, $6,
-             to_timestamp($7::double precision / 1000))`,
+             reviewed_at) VALUES ($1, $2, $3, $4, $5,
+             to_timestamp($6::double precision / 1000))`,
           [batch.participantId, item.clientId, contentHmac, codec.encryptStudy({ text: item.text }),
-            item.localSuggestion, item.reviewedCategory, item.reviewedAt]);
+            item.localSuggestion, item.reviewedAt]);
           acceptedClientIds.push(item.clientId);
-          counts = { ...counts, totalAccepted: counts.totalAccepted + 1,
-            scamAccepted: counts.scamAccepted + (item.reviewedCategory === 'SCAM' ? 1 : 0),
-            safeAccepted: counts.safeAccepted + (item.reviewedCategory === 'SAFE' ? 1 : 0) };
+          counts = { totalAccepted: counts.totalAccepted + 1 };
         }
         const response = { acceptedClientIds, rejectedClientIds, progress: counts };
         await client.query(`INSERT INTO study.batches
@@ -138,7 +128,7 @@ function createStudyRepository(pool, codec, { retentionDays = 365 } = {}) {
     },
     async list(page = 1) {
       const result = await pool.query(`SELECT c.id, c.participant_id, c.local_suggestion,
-        c.participant_label, c.created_at, c.excluded_at, p.status AS prediction_status,
+        c.created_at, c.excluded_at, p.status AS prediction_status,
         e.label AS expert_label FROM study.contributions c
         LEFT JOIN study.predictions p ON p.contribution_id = c.id
         LEFT JOIN study.expert_labels e ON e.contribution_id = c.id
@@ -147,7 +137,7 @@ function createStudyRepository(pool, codec, { retentionDays = 365 } = {}) {
     },
     async get(id) {
       const result = await pool.query(`SELECT c.id, c.participant_id, c.content_encrypted,
-        c.local_suggestion, c.participant_label, c.created_at, c.excluded_at,
+        c.local_suggestion, c.created_at, c.excluded_at,
         p.status AS prediction_status, p.classification, p.confidence, p.error_code,
         p.model_name, p.model_digest, p.pipeline_sha256, p.knowledge_sha256,
         c.exclusion_reason,
@@ -229,7 +219,7 @@ function createStudyRepository(pool, codec, { retentionDays = 365 } = {}) {
     },
     async exportRows() {
       const result = await pool.query(`SELECT c.id, c.participant_id, c.local_suggestion,
-        c.participant_label, c.created_at, p.status, p.classification, p.confidence,
+        c.created_at, p.status, p.classification, p.confidence,
         p.error_code, p.model_name, p.model_digest, p.pipeline_sha256, p.knowledge_sha256,
         e.label AS expert_label, e.reviewer, e.reviewed_at AS expert_reviewed_at
         FROM study.contributions c
